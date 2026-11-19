@@ -105,10 +105,31 @@ foreach ($mt in $modTable) {
   $zones = @()
   if ($mt.src -ne '') { $zones = ConvModule (Join-Path $src $mt.src) }
   elseif ($mt.id -eq 'RCC') {
-    $zones = @(
-      [ordered]@{ id='210C'; name='Park/grip menu'; fields=@([ordered]@{en='210C raw (A010=park menu)';fi='';byteStart=0;mask='FF';type='raw';options=@()}) },
-      [ordered]@{ id='2133'; name='2133 (raw)'; fields=@() }
-    )
+    # RCC/NAC: no open PyPSADiag map. If a local Diagbox NAC export (nac-tulkinta.csv) is
+    # present, build full RCC from it (LOCAL only, proprietary). Otherwise minimal fallback.
+    $nac = Join-Path $dir '..\nac-tulkinta.csv'
+    if (Test-Path $nac) {
+      foreach ($g in (Import-Csv $nac -Encoding UTF8 | Group-Object Zone)) {
+        $flds = @()
+        foreach ($r in $g.Group) {
+          $byte = [Convert]::ToInt32($r.Tavu, 16); $maskHex = ("$($r.Maski)").ToUpper(); $en = "$($r.Kuvaus)"; $vaih = "$($r.Vaihtoehdot)"
+          if ($vaih.Trim() -ne '') {
+            $opts = @()
+            foreach ($o in ($vaih -split '\s*;\s*')) { if ($o -match '^\s*([0-9A-Fa-f]+)\s*=\s*(.+?)\s*$') { $opts += [ordered]@{ en = $Matches[2].Trim(); fi = ''; val = ('{0:X2}' -f [Convert]::ToInt32($Matches[1], 16)) } } }
+            if ($opts.Count -ge 2) { $flds += [ordered]@{ en = $en; fi = ''; byteStart = $byte; mask = $maskHex; type = 'enum'; options = $opts } }
+            else { $flds += [ordered]@{ en = $en; fi = ''; byteStart = $byte; mask = $maskHex; type = 'bits'; options = @() } }
+          }
+          elseif ("$($r.Tila)" -match '(?i)numero|number') { $flds += [ordered]@{ en = $en; fi = ''; byteStart = $byte; mask = $maskHex; type = 'bits'; options = @() } }
+          else { $mb = [Convert]::ToInt32($maskHex, 16); $flds += [ordered]@{ en = $en; fi = ''; byteStart = $byte; mask = $maskHex; type = 'enum'; options = @([ordered]@{en='Off';fi='Pois';val='00'}, [ordered]@{en='On';fi=$ON;val=('{0:X2}' -f $mb)}) } }
+        }
+        $zones += [ordered]@{ id = $g.Name; name = "RCC $($g.Name)"; fields = $flds }
+      }
+    } else {
+      $zones = @(
+        [ordered]@{ id='210C'; name='Park/grip menu'; fields=@([ordered]@{en='210C raw (A010=park menu)';fi='';byteStart=0;mask='FF';type='raw';options=@()}) },
+        [ordered]@{ id='2133'; name='2133 (raw)'; fields=@() }
+      )
+    }
   }
   if ($mt.hide) { $zones = @($zones | Where-Object { -not ($_.id -like '01*' -or $_.id -like '02*' -or $_.id -like '1*' -or $_.id -like 'F*' -or $_.id -eq '2100') }) }
   $modulesOut += [ordered]@{ id=$mt.id; name=$mt.name; tx=$mt.tx; rx=$mt.rx; key=$mt.key; traceability=$mt.trace; byteOffset=$mt.off; zones=$zones }

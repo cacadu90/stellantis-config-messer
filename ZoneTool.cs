@@ -41,7 +41,7 @@ namespace ZoneTool
                 var m = new Module { Id = S(md["id"]), Name = S(md["name"]), Tx = S(md["tx"]), Rx = S(md["rx"]), Key = S(md["key"]), Trace = md.ContainsKey("traceability") ? S(md["traceability"]) : "no", ByteOffset = md.ContainsKey("byteOffset") ? Convert.ToInt32(md["byteOffset"]) : 0 };
                 foreach (var zo in A(md["zones"]))
                 {
-                    var zd = D(zo); if (S(zd["id"]) == "2100") continue; var z = new Zone { Id = S(zd["id"]), Name = Pick(zd, "name") };
+                    var zd = D(zo); var z = new Zone { Id = S(zd["id"]), Name = Pick(zd, "name") };
                     if (zd.ContainsKey("fields") && A(zd["fields"]) != null)
                         foreach (var fo in A(zd["fields"]))
                         {
@@ -180,7 +180,7 @@ namespace ZoneTool
     class MainForm : Form
     {
         ComboBox cbTrans, cbPort, cbModule, cbZone; FlowLayoutPanel pnlFields; TextBox txtLog;
-        Button btnAuto, btnConn, btnRead, btnReadAll, btnWrite, btnDtcR, btnDtcC, btnLog; Panel logPanel;
+        Button btnAuto, btnConn, btnRead, btnReadAll, btnScan, btnWrite, btnDtcR, btnDtcC, btnLog; Panel logPanel;
         Label lblStatus, lblMod, lblZone; PictureBox flagFi, flagGb;
         ITransport trans; Module curMod;
         List<ZoneView> views = new List<ZoneView>();
@@ -188,15 +188,15 @@ namespace ZoneTool
 
         string T(string key)
         {
-            var fi = new Dictionary<string, string> { {"auto","Autodetect"},{"conn","Yhdist\u00e4"},{"disc","Katkaise"},{"noconn","Ei yhteytt\u00e4"},{"module","Moduuli:"},{"zone","Zone:"},{"read","Lue"},{"readall","Lue kaikki"},{"write","Kirjoita"},{"dtcr","Lue DTC"},{"dtcc","Tyhjenn\u00e4 DTC"},{"connto","Yhdistetty "} };
-            var en = new Dictionary<string, string> { {"auto","Autodetect"},{"conn","Connect"},{"disc","Disconnect"},{"noconn","Not connected"},{"module","Module:"},{"zone","Zone:"},{"read","Read"},{"readall","Read all"},{"write","Write"},{"dtcr","Read DTC"},{"dtcc","Clear DTC"},{"connto","Connected "} };
+            var fi = new Dictionary<string, string> { {"auto","Autodetect"},{"conn","Yhdist\u00e4"},{"disc","Katkaise"},{"noconn","Ei yhteytt\u00e4"},{"module","Moduuli:"},{"zone","Zone:"},{"read","Lue"},{"readall","Lue kaikki"},{"scan","Skannaa"},{"write","Kirjoita"},{"dtcr","Lue DTC"},{"dtcc","Tyhjenn\u00e4 DTC"},{"connto","Yhdistetty "} };
+            var en = new Dictionary<string, string> { {"auto","Autodetect"},{"conn","Connect"},{"disc","Disconnect"},{"noconn","Not connected"},{"module","Module:"},{"zone","Zone:"},{"read","Read"},{"readall","Read all"},{"scan","Scan"},{"write","Write"},{"dtcr","Read DTC"},{"dtcc","Clear DTC"},{"connto","Connected "} };
             var d = lang == "fi" ? fi : en; return d.ContainsKey(key) ? d[key] : key;
         }
         bool Vci() { return cbTrans.SelectedIndex == 1; }
 
         public MainForm()
         {
-            Text = "Stellantis Config Messer"; Width = 1120; Height = 760; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 9);
+            Text = "Stellantis Config Messer"; Width = 1180; Height = 760; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 9);
 
             var top = new Panel { Dock = DockStyle.Top, Height = 44 };
             cbTrans = new ComboBox { Left = 10, Top = 10, Width = 130, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -218,12 +218,13 @@ namespace ZoneTool
             cbModule = new ComboBox { Left = 72, Top = 8, Width = 230, DropDownStyle = ComboBoxStyle.DropDownList }; cbModule.SelectedIndexChanged += (s, e) => FillZones();
             lblZone = new Label { Left = 322, Top = 11, Width = 44 };
             cbZone = new ComboBox { Left = 366, Top = 8, Width = 230, DropDownStyle = ComboBoxStyle.DropDownList };
-            btnRead = new Button { Left = 604, Top = 7, Width = 70 }; btnRead.Click += (s, e) => DoReadSingle();
-            btnReadAll = new Button { Left = 678, Top = 7, Width = 100 }; btnReadAll.Click += (s, e) => DoReadAll();
-            btnWrite = new Button { Left = 782, Top = 7, Width = 100, Enabled = false }; btnWrite.Click += (s, e) => DoWrite();
-            btnDtcR = new Button { Left = 886, Top = 7, Width = 80 }; btnDtcR.Click += (s, e) => DoDtc(false);
-            btnDtcC = new Button { Left = 970, Top = 7, Width = 95 }; btnDtcC.Click += (s, e) => DoDtc(true);
-            row2.Controls.AddRange(new Control[] { lblMod, cbModule, lblZone, cbZone, btnRead, btnReadAll, btnWrite, btnDtcR, btnDtcC });
+            btnRead = new Button { Left = 604, Top = 7, Width = 68 }; btnRead.Click += (s, e) => DoReadSingle();
+            btnReadAll = new Button { Left = 676, Top = 7, Width = 90 }; btnReadAll.Click += (s, e) => DoReadAll();
+            btnScan = new Button { Left = 770, Top = 7, Width = 80 }; btnScan.Click += (s, e) => DoScan();
+            btnWrite = new Button { Left = 854, Top = 7, Width = 95, Enabled = false }; btnWrite.Click += (s, e) => DoWrite();
+            btnDtcR = new Button { Left = 953, Top = 7, Width = 80 }; btnDtcR.Click += (s, e) => DoDtc(false);
+            btnDtcC = new Button { Left = 1037, Top = 7, Width = 95 }; btnDtcC.Click += (s, e) => DoDtc(true);
+            row2.Controls.AddRange(new Control[] { lblMod, cbModule, lblZone, cbZone, btnRead, btnReadAll, btnScan, btnWrite, btnDtcR, btnDtcC });
 
             pnlFields = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BorderStyle = BorderStyle.FixedSingle };
             logPanel = new Panel { Dock = DockStyle.Bottom, Height = 190 };
@@ -251,7 +252,7 @@ namespace ZoneTool
             flagFi.BorderStyle = l == "fi" ? BorderStyle.Fixed3D : BorderStyle.None;
             flagGb.BorderStyle = l == "en" ? BorderStyle.Fixed3D : BorderStyle.None;
             btnAuto.Text = T("auto"); btnConn.Text = (trans != null && trans.IsOpen) ? T("disc") : T("conn");
-            lblMod.Text = T("module"); lblZone.Text = T("zone"); btnRead.Text = T("read"); btnReadAll.Text = T("readall"); btnWrite.Text = T("write"); btnDtcR.Text = T("dtcr"); btnDtcC.Text = T("dtcc");
+            lblMod.Text = T("module"); lblZone.Text = T("zone"); btnRead.Text = T("read"); btnReadAll.Text = T("readall"); btnScan.Text = T("scan"); btnWrite.Text = T("write"); btnDtcR.Text = T("dtcr"); btnDtcC.Text = T("dtcc");
             if ((trans == null || !trans.IsOpen) && !busy) { lblStatus.Text = T("noconn"); lblStatus.ForeColor = Color.Firebrick; }
             UpdateLogBtn(); Render();
         }
@@ -347,8 +348,43 @@ namespace ZoneTool
             th.IsBackground = true; th.Start();
         }
 
+        void DoScan()
+        {
+            if (!Need()) return; busy = true; SetButtons(false); var mod = curMod;
+            var th = new Thread(() =>
+            {
+                var list = new List<ZoneView>();
+                try
+                {
+                    trans.SelectEcu(mod.Tx, mod.Rx);
+                    if (!Tx("1003", 1200).Contains("5003")) L("VIRHE/ERROR 1003.");
+                    else
+                    {
+                        int[] bases = { 0x2100, 0x2200, 0x2300 }; int total = bases.Length * 256, done = 0;
+                        foreach (int b in bases)
+                            for (int k = 0; k < 256; k++)
+                            {
+                                done++; string zid = (b + k).ToString("X4");
+                                if (done % 16 == 0) Status((lang == "fi" ? "Skannataan " : "Scanning ") + done + "/" + total + "  " + zid);
+                                string hex = ReadZone(zid, 500);
+                                if (hex != null) { Zone z = mod.Zones.FirstOrDefault(zz => zz.Id == zid); if (z == null) z = new Zone { Id = zid, Name = "(discovered)" }; list.Add(new ZoneView { Zone = z, OrigHex = hex, Bytes = Hex.ToBytes(hex) }); }
+                            }
+                        Tx("1001", 300);
+                    }
+                }
+                catch (Exception ex) { L("VIRHE/ERROR scan: " + ex.Message); }
+                this.BeginInvoke(new Action(() =>
+                {
+                    views = list; Render(); btnWrite.Enabled = views.Count > 0; busy = false; SetButtons(true);
+                    lblStatus.Text = (trans != null && trans.IsOpen) ? (T("connto") + (Vci() ? "Diagbox VCI" : cbPort.SelectedItem)) : T("noconn"); lblStatus.ForeColor = (trans != null && trans.IsOpen) ? Color.Green : Color.Firebrick;
+                    L((lang == "fi" ? "Skannaus valmis: " : "Scan done: ") + list.Count + (lang == "fi" ? " zonea löytyi." : " zones found."));
+                }));
+            });
+            th.IsBackground = true; th.Start();
+        }
+
         ZoneView ReadInto(Zone z, int ms) { string hex = ReadZone(z.Id, ms); if (hex == null) return null; return new ZoneView { Zone = z, OrigHex = hex, Bytes = Hex.ToBytes(hex) }; }
-        void SetButtons(bool en) { if (InvokeRequired) { BeginInvoke(new Action(() => SetButtons(en))); return; } btnRead.Enabled = en; btnReadAll.Enabled = en; btnDtcR.Enabled = en; btnDtcC.Enabled = en; btnConn.Enabled = en; cbModule.Enabled = en; cbTrans.Enabled = en; }
+        void SetButtons(bool en) { if (InvokeRequired) { BeginInvoke(new Action(() => SetButtons(en))); return; } btnRead.Enabled = en; btnReadAll.Enabled = en; btnScan.Enabled = en; btnDtcR.Enabled = en; btnDtcC.Enabled = en; btnConn.Enabled = en; cbModule.Enabled = en; cbTrans.Enabled = en; }
         void Status(string s) { if (InvokeRequired) { BeginInvoke(new Action(() => Status(s))); return; } lblStatus.Text = s; lblStatus.ForeColor = Color.DarkBlue; }
 
         Control BuildControl(ZoneView v, Field f, int left, int width)
