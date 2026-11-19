@@ -16,7 +16,7 @@ that ships with Diagbox).
 ## What it does
 
 - **Browse & edit config zones** of many ECUs (BSI, ESP/ABS, instrument cluster,
-  VCU, parking-assist, steering, radar, camera, …) with decoded fields:
+  VCU, parking-assist, steering, radar, camera, RCC/NAC infotainment, …) with decoded fields:
   - on/off settings → **toggle buttons**
   - multi-value settings → **drop-downs**
   - everything else → guarded **hex** field
@@ -67,8 +67,9 @@ powershell -ExecutionPolicy Bypass -File build-zones.ps1
 
 `build-zones.ps1` is **self-contained**: it downloads every field map from
 [Barracuda09/PyPSADiag](https://github.com/Barracuda09/PyPSADiag) — including the BSI2010
-map — and converts them to the app's schema. **No Diagbox required.** (Pre-built releases
-ship a ready-made `zones.json`.)
+body-control map and the TELEMAT/RCC infotainment map — and converts them to the app's
+schema. **No Diagbox required**, and every field map ships from open sources. (Pre-built
+releases ship a ready-made `zones.json`.)
 
 ## ⚠️ Disclaimer
 
