@@ -59,16 +59,16 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /platform:x86 /target:wi
 ## Zone map (`zones.json`)
 
 The app is data-driven: it reads `zones.json` describing modules, keys, zones and fields.
-**`zones.json` is not shipped** — generate it locally:
+Generate it with:
 
 ```
 powershell -ExecutionPolicy Bypass -File build-zones.ps1
 ```
 
-`build-zones.ps1` downloads the field maps from
-[Barracuda09/PyPSADiag](https://github.com/Barracuda09/PyPSADiag) and converts them to the
-app's schema. Optional BSI zone descriptions are read from a **local** Diagbox export
-(not included here — Diagbox is proprietary Stellantis software).
+`build-zones.ps1` is **self-contained**: it downloads every field map from
+[Barracuda09/PyPSADiag](https://github.com/Barracuda09/PyPSADiag) — including the BSI2010
+map — and converts them to the app's schema. **No Diagbox required.** (Pre-built releases
+ship a ready-made `zones.json`.)
 
 ## ⚠️ Disclaimer
 
