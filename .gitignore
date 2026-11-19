@@ -1,0 +1,7 @@
+# build artifacts / generated / local data
+*.exe
+zones.json
+backup/
+maps_src/
+tools/
+*.user
