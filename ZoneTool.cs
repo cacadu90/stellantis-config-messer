@@ -3685,7 +3685,7 @@ namespace ZoneTool
 		{
 			if (fi)
 			{
-				return "\u2022  Valitse interface (Arduino / Diagbox VCI / ELM327) ja portti, paina Yhdist\u00e4.\n" +
+				return "\u2022  Valitse yhteystapa (Arduino / Diagbox VCI / ELM327) ja portti, paina Yhdist\u00e4.\n" +
 					"    Tai valitse Demo ja selaa kaikkia ohjainlaitteita ja zoneja ilman autoa.\n\n" +
 					"\u2022  Valitse ohjainlaite (ECU) yl\u00e4reunan pudotusvalikosta.\n\n" +
 					"\u2022  Lue  \u2013  hakee ECU:n kaikki konfiguraatiozonet. Kentt\u00e4 n\u00e4kyy kytkimen\u00e4, pudotusvalikkona\n" +
