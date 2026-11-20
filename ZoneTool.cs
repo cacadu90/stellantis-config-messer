@@ -3227,7 +3227,7 @@ namespace ZoneTool
 							list.Count,
 							"/",
 							mod.Zones.Count,
-							" zonea."
+							(this.lang == "fi") ? " zonea." : " zones."
 						}));
 					}));
 				})

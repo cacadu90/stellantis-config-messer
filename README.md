@@ -9,6 +9,8 @@ It talks to the car over the diagnostic CAN bus through one of four **interfaces
 firmware, a **Diagbox / Evolution XS VCI** (via the `VCIAccess.dll` that ships with Diagbox),
 a generic **ELM327** adapter, or **Demo** mode (browse every ECU and zone with no car attached).
 
+![Stellantis Config Messer — dark UI reading BSI config zones in Demo mode](screenshot.png)
+
 > ☕ If this saved you a trip to the dealer: **https://www.buymeacoffee.com/plagufin**
 
 ---
