@@ -112,6 +112,21 @@ namespace ZoneTool
 		// Token: 0x04000016 RID: 22
 		public List<Zone> Zones = new List<Zone>();
 	}
+	// VIN pairing candidate (infotainment / radio unit on one tx:rx pair)
+	internal class VinPair
+	{
+		public string Tx;
+
+		public string Rx;
+
+		public string Label;
+
+		public string ModVin;
+
+		public Module Mod;
+
+		public List<string> Keys = new List<string>();
+	}
 	// Token: 0x02000006 RID: 6
 	internal static class Data
 	{
@@ -3019,6 +3034,7 @@ namespace ZoneTool
 				new Thread(delegate()
 				{
 					List<Module> present = new List<Module>();
+					List<VinPair> vinMiss = new List<VinPair>();
 					Dictionary<string, bool> dictionary = new Dictionary<string, bool>();
 					int num = 0;
 					foreach (Module module in all)
@@ -3061,6 +3077,46 @@ namespace ZoneTool
 					}
 					try
 					{
+						if (this.IsValidVin(this.vin))
+						{
+							Dictionary<string, VinPair> seen = new Dictionary<string, VinPair>();
+							foreach (Module module2 in present)
+							{
+								if (!this.IsInfotainment(module2))
+								{
+									continue;
+								}
+								string pk = module2.Tx + ":" + module2.Rx;
+								VinPair vp;
+								if (!seen.TryGetValue(pk, out vp))
+								{
+									string mv = this.ReadVinFrom(tr, module2.Tx, module2.Rx);
+									vp = new VinPair
+									{
+										Tx = module2.Tx,
+										Rx = module2.Rx,
+										Mod = module2,
+										ModVin = mv,
+										Label = module2.Id + " (" + module2.Name + ")"
+									};
+									seen[pk] = vp;
+									if (mv != null && !string.Equals(mv, this.vin, StringComparison.OrdinalIgnoreCase))
+									{
+										vinMiss.Add(vp);
+									}
+								}
+								if (!string.IsNullOrEmpty(module2.Key) && !vp.Keys.Contains(module2.Key.ToUpper()))
+								{
+									vp.Keys.Add(module2.Key.ToUpper());
+								}
+							}
+						}
+					}
+					catch
+					{
+					}
+					try
+					{
 						tr.Send("1001", null, 200);
 					}
 					catch
@@ -3082,12 +3138,214 @@ namespace ZoneTool
 						}
 						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.Vci() ? "Diagbox VCI" : (this.Demo() ? "Demo" : this.cbPort.SelectedItem))) : this.T("noconn"));
 						this.lblStatus.ForeColor = ((this.trans != null && this.trans.IsOpen) ? Theme.Green : Theme.Red);
+						if (vinMiss.Count > 0)
+						{
+							List<VinPair> confirmed = new List<VinPair>();
+							foreach (VinPair vp2 in vinMiss)
+							{
+								string msg = (this.lang == "fi") ? (vp2.Label + "\n\nTallennettu VIN:  " + vp2.ModVin + "\nAuton VIN:          " + this.vin + "\n\nVIN ei t\u00e4sm\u00e4\u00e4. Paritetaanko t\u00e4m\u00e4 yksikk\u00f6 t\u00e4h\u00e4n autoon\n(kirjoitetaan auton VIN yksik\u00f6n F190-zoneen)?") : (vp2.Label + "\n\nStored VIN:  " + vp2.ModVin + "\nCar VIN:      " + this.vin + "\n\nVIN mismatch. Pair this unit to this car\n(write the car VIN to the unit's F190 zone)?");
+								if (vp2.Keys.Count == 0)
+								{
+									MessageBox.Show(msg + ((this.lang == "fi") ? "\n\n(Ei kirjoitusavainta t\u00e4lle yksik\u00f6lle - paritus ei ole mahdollista.)" : "\n\n(No write key for this unit - pairing is not possible.)"), (this.lang == "fi") ? "VIN ei t\u00e4sm\u00e4\u00e4" : "VIN mismatch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+								}
+								else if (MessageBox.Show(msg, (this.lang == "fi") ? "VIN-paritus" : "VIN pairing", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+								{
+									confirmed.Add(vp2);
+								}
+							}
+							if (confirmed.Count > 0)
+							{
+								this.PairVinBatch(confirmed);
+							}
+						}
 					}));
 				})
 				{
 					IsBackground = true
 				}.Start();
 			}
+		}
+
+		// True for infotainment / radio units that carry a VIN (NAC, RCC, IVI, RD4/RD4.5, SMEG...).
+		private bool IsInfotainment(Module m)
+		{
+			string text = (m.Id ?? "").ToUpper();
+			string text2 = (m.Name ?? "").ToUpper();
+			return text.Contains("RCC") || text.Contains("NAC") || text.Contains("TELEMAT") || text.Contains("AUTORADIO") || text.Contains("RADIO") || text.Contains("SMEG") || text.Contains("RNEG") || text.Contains("IVI") || text2.Contains("INFOTAINMENT") || text2.Contains("RADIO");
+		}
+
+		private bool IsValidVin(string v)
+		{
+			if (string.IsNullOrEmpty(v) || v.Length != 17)
+			{
+				return false;
+			}
+			foreach (char c in v)
+			{
+				if (!char.IsLetterOrDigit(c))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private static string AsciiToHex(string s)
+		{
+			StringBuilder stringBuilder = new StringBuilder();
+			foreach (char c in s)
+			{
+				stringBuilder.Append(((int)c & 255).ToString("X2"));
+			}
+			return stringBuilder.ToString();
+		}
+
+		// Read VIN (22F190) from a given tx:rx pair, as ASCII. null if no answer.
+		private string ReadVinFrom(ITransport tr, string tx, string rx)
+		{
+			string result;
+			try
+			{
+				tr.SelectEcu(tx, rx);
+				string text = tr.Send("22F190", null, 900);
+				int num = text.IndexOf("62F190");
+				if (num < 0)
+				{
+					result = null;
+				}
+				else
+				{
+					string text2 = MainForm.AsciiOf(Hex.ToBytes(text.Substring(num + 6)));
+					result = ((text2.Length < 11) ? null : text2);
+				}
+			}
+			catch
+			{
+				result = null;
+			}
+			return result;
+		}
+
+		// Raw F190 data hex (after 62F190) from the currently selected ECU. null if no answer.
+		private string RawF190(ITransport tr)
+		{
+			string text = tr.Send("22F190", null, 900);
+			int num = text.IndexOf("62F190");
+			if (num < 0)
+			{
+				return null;
+			}
+			return text.Substring(num + 6);
+		}
+
+		// Pair one or more infotainment units to this car by writing the car VIN into F190.
+		private void PairVinBatch(List<VinPair> items)
+		{
+			this.busy = true;
+			this.SetButtons(false);
+			ITransport tr = this.trans;
+			string carVin = this.vin;
+			string vinHex = MainForm.AsciiToHex(carVin);
+			new Thread(delegate()
+			{
+				int num = 0;
+				foreach (VinPair vinPair in items)
+				{
+					try
+					{
+						tr.SelectEcu(vinPair.Tx, vinPair.Rx);
+						try
+						{
+							string text = this.RawF190(tr);
+							if (text != null)
+							{
+								List<KeyValuePair<string, string>> list = new List<KeyValuePair<string, string>>();
+								list.Add(new KeyValuePair<string, string>("F190", text));
+								string str = this.SaveBackupRows(vinPair.Mod, list);
+								this.L(((this.lang == "fi") ? "Varmuuskopio (F190): " : "Backup (F190): ") + str);
+							}
+						}
+						catch (Exception ex)
+						{
+							this.L("WARN backup: " + ex.Message);
+						}
+						if (!tr.Send("1003", null, 1200).Contains("5003"))
+						{
+							this.L((this.lang == "fi") ? ("VIRHE 1003 (" + vinPair.Label + ").") : ("ERROR 1003 (" + vinPair.Label + ")."));
+						}
+						else
+						{
+							bool flag = false;
+							foreach (string text2 in vinPair.Keys)
+							{
+								string text3 = tr.Send("2703", null, 900);
+								int num2 = text3.IndexOf("6703");
+								if (num2 >= 0)
+								{
+									byte[] chg = Hex.ToBytes(text3.Substring(num2 + 4, 8));
+									string str2 = Sk.Key(text2, chg);
+									if (tr.Send("2704" + str2, null, 900).Contains("6704"))
+									{
+										flag = true;
+										this.L("Unlock OK (key " + text2 + ").");
+										break;
+									}
+								}
+							}
+							if (!flag)
+							{
+								tr.Send("1001", null, 300);
+								this.L((this.lang == "fi") ? ("VIRHE: avausta ei saatu - v\u00e4\u00e4r\u00e4 avain? (" + vinPair.Label + ").") : ("ERROR: unlock failed - wrong key? (" + vinPair.Label + ")."));
+							}
+							else
+							{
+								string text4 = tr.Send("2EF190" + vinHex, null, 2500);
+								if (!text4.Contains("6EF190"))
+								{
+									this.L("VIRHE/ERROR F190: " + text4);
+									tr.Send("1001", null, 300);
+								}
+								else
+								{
+									string text5 = this.RawF190(tr);
+									tr.Send("1001", null, 300);
+									if (text5 != null && text5.Length >= vinHex.Length && text5.Substring(0, vinHex.Length).Equals(vinHex, StringComparison.OrdinalIgnoreCase))
+									{
+										num++;
+										this.L((this.lang == "fi") ? ("VIN paritettu: " + vinPair.Label + " -> " + carVin) : ("VIN paired: " + vinPair.Label + " -> " + carVin));
+									}
+									else
+									{
+										this.L((this.lang == "fi") ? ("TARKISTA VIN (" + vinPair.Label + "): " + text5) : ("CHECK VIN (" + vinPair.Label + "): " + text5));
+									}
+								}
+							}
+						}
+					}
+					catch (Exception ex2)
+					{
+						try
+						{
+							tr.Send("1001", null, 300);
+						}
+						catch
+						{
+						}
+						this.L("VIRHE/ERROR pair: " + ex2.Message);
+					}
+				}
+				int done = num;
+				int total = items.Count;
+				this.BeginInvoke(new Action(delegate()
+				{
+					this.busy = false;
+					this.SetButtons(true);
+					MessageBox.Show((this.lang == "fi") ? ("VIN paritettu " + done + "/" + total + " yksikk\u00f6\u00f6n.") : ("VIN paired to " + done + "/" + total + " unit(s)."), (this.lang == "fi") ? "Valmis" : "Done");
+				}));
+			})
+			{
+				IsBackground = true
+			}.Start();
 		}
 
 		// Token: 0x06000081 RID: 129 RVA: 0x0000842C File Offset: 0x0000662C
