@@ -5,3 +5,5 @@ backup/
 maps_src/
 tools/
 *.user
+# Local Diagbox-ripped data (proprietary, never publish)
+diagbox_overlay.json
