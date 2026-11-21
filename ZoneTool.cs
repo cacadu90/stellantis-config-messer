@@ -2267,6 +2267,26 @@ namespace ZoneTool
 			{
 				this.DiagboxRip();
 			};
+			this.menuView = new ToolStripMenuItem();
+			this.menuView.Click += delegate(object s, EventArgs e)
+			{
+				this.ViewBackup();
+			};
+			this.menuExport = new ToolStripMenuItem();
+			this.menuExport.Click += delegate(object s, EventArgs e) { this.ExportConfig(); };
+			this.menuCompare = new ToolStripMenuItem();
+			this.menuCompare.Click += delegate(object s, EventArgs e) { this.CompareBackups(); };
+			this.menuProfiles = new ToolStripMenuItem();
+			ToolStripMenuItem pAcc = new ToolStripMenuItem("ACC + LPA");
+			pAcc.Click += delegate(object s, EventArgs e) { this.ApplyProfile("ACC", "ACC + LPA"); };
+			ToolStripMenuItem pPark = new ToolStripMenuItem("Park Assist");
+			pPark.Click += delegate(object s, EventArgs e) { this.ApplyProfile("PARK", "Park Assist"); };
+			this.menuProfiles.DropDownItems.Add(pAcc);
+			this.menuProfiles.DropDownItems.Add(pPark);
+			this.menuTools.DropDownItems.Add(this.menuView);
+			this.menuTools.DropDownItems.Add(this.menuExport);
+			this.menuTools.DropDownItems.Add(this.menuCompare);
+			this.menuTools.DropDownItems.Add(this.menuProfiles);
 			this.menuTools.DropDownItems.Add(this.menuRestore);
 			this.menuTools.DropDownItems.Add(this.menuRip);
 			menuStrip.Items.Add(this.menuTools);
@@ -2344,6 +2364,13 @@ namespace ZoneTool
 			};
 			this.fieldsHost = fieldsHost;
 			fieldsHost.Controls.Add(this.pnlFields);
+			Panel searchPanel = new Panel { Dock = DockStyle.Top, Height = 30 };
+			this.lblSearch = new Label { Left = 6, Top = 7, Width = 92, Text = "Hae / Search:", ForeColor = Theme.Sub, AutoSize = false };
+			this.txtSearch = new TextBox { Left = 100, Top = 4, Width = 300, BorderStyle = BorderStyle.FixedSingle };
+			this.txtSearch.TextChanged += delegate(object es, EventArgs ee) { this.Render(); };
+			searchPanel.Controls.Add(this.lblSearch);
+			searchPanel.Controls.Add(this.txtSearch);
+			fieldsHost.Controls.Add(searchPanel);
 			base.Controls.Add(fieldsHost);
 			base.Controls.Add(this.logPanel);
 			base.Controls.Add(panel);
@@ -2523,6 +2550,10 @@ namespace ZoneTool
 			if (this.menuRip != null)
 			{
 				this.menuRip.Text = this.T("ripper");
+				if (this.menuView != null) { this.menuView.Text = (this.lang == "fi") ? "Varmuuskopion tarkastelu" : "View backup"; }
+				if (this.menuProfiles != null) { this.menuProfiles.Text = (this.lang == "fi") ? "Valmiit profiilit (kirjoita kaikki moduulit)" : "Ready profiles (write all modules)"; }
+				if (this.menuExport != null) { this.menuExport.Text = (this.lang == "fi") ? "Vie luettu konfiguraatio (.txt)" : "Export read config (.txt)"; }
+				if (this.menuCompare != null) { this.menuCompare.Text = (this.lang == "fi") ? "Vertaa varmuuskopioita" : "Compare backups"; }
 			}
 			if ((this.trans == null || !this.trans.IsOpen) && !this.busy)
 			{
@@ -3851,6 +3882,12 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 						List<Field> list = (from f in v.Zone.Fields
 						where f.ByteStart + this.curMod.ByteOffset < v.Bytes.Length
 						select f).ToList<Field>();
+							string q = (this.txtSearch != null) ? this.txtSearch.Text.Trim().ToLower() : "";
+							if (q.Length > 0)
+							{
+								bool zoneMatch = v.Zone.Name.ToLower().Contains(q) || v.Zone.Id.ToLower().Contains(q);
+								if (!zoneMatch) { list = (from f in list where f.L(this.lang).ToLower().Contains(q) select f).ToList<Field>(); if (list.Count == 0) { continue; } }
+							}
 						if (v.Zone.Id == "F190")
 						{
 							Panel panel = this.NewRow();
@@ -4808,6 +4845,314 @@ int num = r.IndexOf("5902");
 		}
 
 		// Token: 0x06000098 RID: 152 RVA: 0x0000C178 File Offset: 0x0000A378
+		private void ViewBackup()
+{
+    string fileName;
+    using (OpenFileDialog ofd = new OpenFileDialog())
+    {
+        string bdir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+        if (Directory.Exists(bdir)) { ofd.InitialDirectory = bdir; }
+        ofd.Filter = "Backup CSV|*.csv|All files|*.*";
+        if (ofd.ShowDialog(this) != DialogResult.OK) { return; }
+        fileName = ofd.FileName;
+    }
+    string ecuId = null; string vin = ""; string ts = "";
+    List<KeyValuePair<string, string>> rows = new List<KeyValuePair<string, string>>();
+    try
+    {
+        foreach (string ln in File.ReadAllLines(fileName))
+        {
+            string t = ln.Trim();
+            if (t.Length == 0) { continue; }
+            string[] a = t.Split(new char[] { ';' });
+            if (a.Length >= 2 && (a[0].Equals("ECU", StringComparison.OrdinalIgnoreCase) || a[0].Equals("Module", StringComparison.OrdinalIgnoreCase))) { ecuId = a[1].Split(new char[] { ' ' })[0].Trim(); }
+            else if (a.Length >= 2 && a[0].Equals("VIN", StringComparison.OrdinalIgnoreCase)) { vin = a[1].Trim(); }
+            else if (a.Length >= 2 && a[0].Equals("Timestamp", StringComparison.OrdinalIgnoreCase)) { ts = a[1].Trim(); }
+            else if (a.Length == 2 && Regex.IsMatch(a[0].Trim(), "^[0-9A-Fa-f]{2,4}$") && Regex.IsMatch(a[1].Trim(), "^[0-9A-Fa-f]+$")) { rows.Add(new KeyValuePair<string, string>(a[0].Trim().ToUpper(), a[1].Trim().ToUpper())); }
+        }
+    }
+    catch (Exception ex) { MessageBox.Show("CSV: " + ex.Message); return; }
+    if (ecuId == null || rows.Count == 0) { MessageBox.Show((this.lang == "fi") ? "Backup-tiedostoa ei tunnistettu." : "Not a recognised backup file."); return; }
+    Module mod = Data.Modules.FirstOrDefault((Module m) => m.Id.Equals(ecuId, StringComparison.OrdinalIgnoreCase));
+    bool fi = this.lang == "fi";
+    int off = (mod != null) ? mod.ByteOffset : 0;
+    List<string> lines = new List<string>();
+    lines.Add("ECU: " + ecuId + ((mod != null) ? ("  (" + mod.Name + ")") : (fi ? "  (tuntematon)" : "  (unknown)")));
+    if (vin != "") { lines.Add("VIN: " + vin); }
+    if (ts != "") { lines.Add((fi ? "Aika: " : "Time: ") + ts); }
+    lines.Add("");
+    foreach (KeyValuePair<string, string> row in rows)
+    {
+        string zid = row.Key;
+        byte[] bytes = Hex.ToBytes(row.Value);
+        Zone zone = (mod != null) ? mod.Zones.FirstOrDefault((Zone z) => z.Id.Equals(zid, StringComparison.OrdinalIgnoreCase)) : null;
+        List<Field> flds = new List<Field>();
+        if (zone != null) { foreach (Field f in zone.Fields) { if (f.ByteStart + off < bytes.Length) { flds.Add(f); } } }
+        if (flds.Count > 0)
+        {
+            lines.Add(zid + "  " + zone.Name);
+            foreach (Field f in flds)
+            {
+                int mask = Convert.ToInt32(f.Mask, 16);
+                int val = (int)bytes[f.ByteStart + off] & mask;
+                string disp = "0x" + val.ToString("X2");
+                foreach (Opt o in f.Options) { if ((Convert.ToInt32(o.Val, 16) & mask) == val) { disp = o.L(this.lang); break; } }
+                lines.Add("    " + f.L(this.lang) + ": " + disp);
+            }
+        }
+        else { lines.Add(zid + ((zone != null) ? ("  " + zone.Name) : (fi ? "  (tuntematon zone)" : "  (unknown zone)")) + "   [raw " + row.Value + "]"); }
+    }
+    Form form = new Form { Text = (fi ? "Varmuuskopion tarkastelu - " : "Backup viewer - ") + Path.GetFileName(fileName), Width = 740, Height = 580, StartPosition = FormStartPosition.CenterParent, Font = this.Font, BackColor = Theme.Bg, ForeColor = Theme.Text };
+    ListBox lb = new ListBox { Dock = DockStyle.Fill, Font = Theme.Mono(9.5f), BackColor = Theme.Panel, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, HorizontalScrollbar = true };
+    foreach (string s in lines) { lb.Items.Add(s); }
+    Panel bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Theme.Bg };
+    Button save = new Button { Left = 8, Top = 9, Width = 220, Height = 28, Text = (fi ? "Tallenna .txt" : "Save .txt") };
+    Theme.Btn(save, Theme.Card, Theme.Text);
+    save.Click += delegate(object s2, EventArgs e2)
+    {
+        using (SaveFileDialog sfd = new SaveFileDialog())
+        {
+            sfd.Filter = "Text|*.txt";
+            sfd.FileName = ecuId + "_" + ((vin != "") ? vin : "config") + ".txt";
+            if (sfd.ShowDialog(form) == DialogResult.OK) { try { File.WriteAllText(sfd.FileName, string.Join("\r\n", lines.ToArray()), new UTF8Encoding(false)); } catch (Exception ex2) { MessageBox.Show(ex2.Message); } }
+        }
+    };
+    bar.Controls.Add(save);
+    form.Controls.Add(lb);
+    form.Controls.Add(bar);
+    form.ShowDialog(this);
+}
+		private class ProfOp { public string Zone; public string Set; public int At = -1; public string Val; }
+		private class ProfMod { public string Name; public string Tx; public string Rx; public string Key; public string Trace; public List<ProfOp> Ops = new List<ProfOp>(); }
+
+		private List<ProfMod> Profile(string name)
+		{
+			List<ProfMod> l = new List<ProfMod>();
+			if (name == "ACC")
+			{
+				l.Add(new ProfMod { Name = "BSI", Tx = "752", Rx = "652", Key = "B4E0", Trace = "yes", Ops = { new ProfOp { Zone = "2348", At = 0, Val = "05" } } });
+				l.Add(new ProfMod { Name = "ARTIV radar", Tx = "6B6", Rx = "696", Key = "EFCA", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 1, Val = "F7" } } });
+				l.Add(new ProfMod { Name = "CVM camera", Tx = "74A", Rx = "64A", Key = "E2E5", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 2, Val = "8D" } } });
+				l.Add(new ProfMod { Name = "VCU", Tx = "6A2", Rx = "682", Key = "0107", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 3, Val = "6F" } } });
+				l.Add(new ProfMod { Name = "ESP", Tx = "6AD", Rx = "68D", Key = "BC93", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 33, Val = "EF" } } });
+			}
+			else if (name == "PARK")
+			{
+				l.Add(new ProfMod { Name = "BSI", Tx = "752", Rx = "652", Key = "B4E0", Trace = "yes", Ops = { new ProfOp { Zone = "2300", At = 0, Val = "37" }, new ProfOp { Zone = "2470", At = 0, Val = "01" } } });
+				l.Add(new ProfMod { Name = "AAS park assist", Tx = "75D", Rx = "65D", Key = "B6F0", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 0, Val = "13" } } });
+				l.Add(new ProfMod { Name = "ESP", Tx = "6AD", Rx = "68D", Key = "BC93", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 34, Val = "9F" } } });
+				l.Add(new ProfMod { Name = "DAE steering", Tx = "6B5", Rx = "695", Key = "2105", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 1, Val = "CE" } } });
+				l.Add(new ProfMod { Name = "RCC infotainment", Tx = "764", Rx = "664", Key = "F107", Trace = "try", Ops = { new ProfOp { Zone = "210C", Set = "A010" }, new ProfOp { Zone = "2133", Set = "0E0100000E04" } } });
+			}
+			return l;
+		}
+
+		private string ReadZoneRaw(ITransport tr, string zone)
+		{
+			string r = tr.Send("22" + zone, new string[] { "62" + zone, "7F22" }, 900);
+			int i = r.IndexOf("62" + zone);
+			if (i < 0) { return null; }
+			return r.Substring(i + 2 + zone.Length);
+		}
+
+		private void ApplyProfile(string name, string label)
+		{
+			if (this.busy) { return; }
+			if (this.trans == null || !this.trans.IsOpen) { MessageBox.Show((this.lang == "fi") ? "Ei yhteytt\u00e4." : "Not connected."); return; }
+			bool fi = this.lang == "fi";
+			List<ProfMod> prof = this.Profile(name);
+			StringBuilder sb = new StringBuilder();
+			sb.AppendLine((fi ? "Profiili: " : "Profile: ") + label);
+			sb.AppendLine(fi ? "Kirjoitetaan N\u00c4IHIN moduuleihin kerralla:" : "Writes to ALL these modules at once:");
+			sb.AppendLine("");
+			foreach (ProfMod m in prof)
+			{
+				sb.AppendLine(m.Name + "  (" + m.Tx + ":" + m.Rx + ")");
+				foreach (ProfOp op in m.Ops)
+				{
+					sb.AppendLine("    " + op.Zone + ((op.Set != null) ? (" = " + op.Set) : ("  byte" + op.At + " = " + op.Val)));
+				}
+			}
+			sb.AppendLine("");
+			sb.AppendLine(fi ? "Varmuuskopio otetaan ennen jokaista kirjoitusta. Varmista ett\u00e4 kyseess\u00e4 on OIKEA auto (e-2008). Jatketaanko?" : "A backup is taken before each write. Make sure this is the RIGHT car (e-2008). Continue?");
+			if (MessageBox.Show(sb.ToString(), (fi ? "Kirjoita profiili" : "Write profile"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { return; }
+			this.busy = true;
+			this.SetButtons(false);
+			ITransport tr = this.trans;
+			new Thread(delegate()
+			{
+				int okMods = 0; int okWrites = 0; int total = 0;
+				foreach (ProfMod m in prof)
+				{
+					try
+					{
+						tr.SelectEcu(m.Tx, m.Rx);
+						try
+						{
+							List<KeyValuePair<string, string>> brows = new List<KeyValuePair<string, string>>();
+							foreach (ProfOp op in m.Ops) { string cur0 = this.ReadZoneRaw(tr, op.Zone); if (cur0 != null) { brows.Add(new KeyValuePair<string, string>(op.Zone, cur0)); } }
+							if (brows.Count > 0) { Module bm = new Module { Id = m.Name.Replace(" ", "_"), Name = m.Name, Tx = m.Tx, Rx = m.Rx, Key = m.Key, Trace = m.Trace, ByteOffset = 0 }; string bp = this.SaveBackupRows(bm, brows); this.L(((fi) ? "Varmuuskopio: " : "Backup: ") + bp); }
+						}
+						catch (Exception be) { this.L("WARN backup " + m.Name + ": " + be.Message); }
+						if (!tr.Send("1003", null, 1200).Contains("5003")) { this.L("VIRHE/ERROR 1003 (" + m.Name + ") - ohitettu."); continue; }
+						string sr = tr.Send("2703", null, 900); int si = sr.IndexOf("6703");
+						if (si < 0) { tr.Send("1001", null, 300); this.L("VIRHE/ERROR: no seed (" + m.Name + ")."); continue; }
+						string keyAns = Sk.Key(m.Key, Hex.ToBytes(sr.Substring(si + 4, 8)));
+						if (!tr.Send("2704" + keyAns, null, 900).Contains("6704")) { tr.Send("1001", null, 300); this.L("VIRHE/ERROR: unlock rejected (" + m.Name + ") - ohitettu."); continue; }
+						foreach (ProfOp op in m.Ops)
+						{
+							total++;
+							string cur = this.ReadZoneRaw(tr, op.Zone);
+							if (cur == null) { this.L("VIRHE " + m.Name + " " + op.Zone + ": luku ep\u00e4onnistui."); continue; }
+							string newHex;
+							if (op.Set != null) { newHex = op.Set.ToUpper(); }
+							else { byte[] b = Hex.ToBytes(cur); if (op.At < b.Length) { b[op.At] = Convert.ToByte(op.Val, 16); } else { this.L("VIRHE " + m.Name + " " + op.Zone + ": byte" + op.At + " ei mahdu."); continue; } newHex = Hex.ToStr(b, b.Length); }
+							if (newHex.Equals(cur, StringComparison.OrdinalIgnoreCase)) { this.L("OK " + m.Name + " " + op.Zone + ": jo asetettu."); okWrites++; continue; }
+							string w = tr.Send("2E" + op.Zone + newHex, null, 2000);
+							if (!w.Contains("6E" + op.Zone)) { this.L("VIRHE " + m.Name + " " + op.Zone + ": kirjoitus hyl\u00e4tty (" + w + ")."); continue; }
+							string re = this.ReadZoneRaw(tr, op.Zone);
+							if (re != null && re.StartsWith(newHex, StringComparison.OrdinalIgnoreCase)) { okWrites++; this.L("OK " + m.Name + " " + op.Zone + " -> " + newHex); } else { this.L("TARKISTA " + m.Name + " " + op.Zone + ": " + re); }
+							if (m.Trace == "yes" || m.Trace == "try") { string ts = tr.Send("2E2901FD000000010101", null, 2000); if (ts.Contains("6E2901")) { this.L("2901 " + m.Name + " OK."); } else if (m.Trace == "yes") { this.L("WARN 2901 " + m.Name + " (" + ts + ")."); } }
+						}
+						tr.Send("1001", null, 300);
+						okMods++;
+					}
+					catch (Exception ex)
+					{
+						try { tr.Send("1001", null, 300); } catch { }
+						this.L("VIRHE/ERROR " + m.Name + ": " + ex.Message);
+					}
+				}
+				int fm = okMods; int fw = okWrites; int ft = total;
+				this.BeginInvoke(new Action(delegate()
+				{
+					this.busy = false;
+					this.SetButtons(true);
+					MessageBox.Show((fi ? ("Profiili kirjoitettu.\nModuuleja: " + fm + "/" + prof.Count + "\nZoneja: " + fw + "/" + ft + "\n\nTee virtasykli (sytytys pois ~30 s) ja aja Tyhjenn\u00e4 DTC jokaiselle moduulille.") : ("Profile written.\nModules: " + fm + "/" + prof.Count + "\nZones: " + fw + "/" + ft + "\n\nDo a power cycle and clear DTCs on each module.")), (fi ? "Valmis" : "Done"));
+				}));
+			})
+			{ IsBackground = true }.Start();
+		}
+		private Dictionary<string, string> ParseBackup(string file, out string ecuId)
+		{
+			ecuId = null;
+			Dictionary<string, string> d = new Dictionary<string, string>();
+			foreach (string ln in File.ReadAllLines(file))
+			{
+				string t = ln.Trim();
+				if (t.Length == 0) { continue; }
+				string[] a = t.Split(new char[] { ';' });
+				if (a.Length >= 2 && (a[0].Equals("ECU", StringComparison.OrdinalIgnoreCase) || a[0].Equals("Module", StringComparison.OrdinalIgnoreCase))) { ecuId = a[1].Split(new char[] { ' ' })[0].Trim(); }
+				else if (a.Length == 2 && Regex.IsMatch(a[0].Trim(), "^[0-9A-Fa-f]{2,4}$") && Regex.IsMatch(a[1].Trim(), "^[0-9A-Fa-f]+$")) { d[a[0].Trim().ToUpper()] = a[1].Trim().ToUpper(); }
+			}
+			return d;
+		}
+
+		private string DecodeField(Module mod, Field f, byte[] bytes)
+		{
+			int off = (mod != null) ? mod.ByteOffset : 0;
+			if (f.ByteStart + off >= bytes.Length) { return null; }
+			int mask = Convert.ToInt32(f.Mask, 16);
+			int val = (int)bytes[f.ByteStart + off] & mask;
+			foreach (Opt o in f.Options) { if ((Convert.ToInt32(o.Val, 16) & mask) == val) { return o.L(this.lang); } }
+			return "0x" + val.ToString("X2");
+		}
+
+		private void ShowReport(string title, List<string> lines, string saveName)
+		{
+			bool fi = this.lang == "fi";
+			Form form = new Form { Text = title, Width = 760, Height = 600, StartPosition = FormStartPosition.CenterParent, Font = this.Font, BackColor = Theme.Bg, ForeColor = Theme.Text };
+			ListBox lb = new ListBox { Dock = DockStyle.Fill, Font = Theme.Mono(9.5f), BackColor = Theme.Panel, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, HorizontalScrollbar = true };
+			foreach (string s in lines) { lb.Items.Add(s); }
+			Panel bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Theme.Bg };
+			Button save = new Button { Left = 8, Top = 9, Width = 220, Height = 28, Text = (fi ? "Tallenna .txt" : "Save .txt") };
+			Theme.Btn(save, Theme.Card, Theme.Text);
+			save.Click += delegate(object s2, EventArgs e2)
+			{
+				using (SaveFileDialog sfd = new SaveFileDialog())
+				{
+					sfd.Filter = "Text|*.txt"; sfd.FileName = saveName;
+					if (sfd.ShowDialog(form) == DialogResult.OK) { try { File.WriteAllText(sfd.FileName, string.Join("\r\n", lines.ToArray()), new UTF8Encoding(false)); } catch (Exception ex) { MessageBox.Show(ex.Message); } }
+				}
+			};
+			bar.Controls.Add(save); form.Controls.Add(lb); form.Controls.Add(bar); form.ShowDialog(this);
+		}
+
+		private void ExportConfig()
+		{
+			bool fi = this.lang == "fi";
+			if (this.views == null || this.views.Count == 0) { MessageBox.Show(fi ? "Lue ensin." : "Read first."); return; }
+			int off = (this.curMod != null) ? this.curMod.ByteOffset : 0;
+			List<string> lines = new List<string>();
+			lines.Add("ECU: " + ((this.curMod != null) ? (this.curMod.Id + "  (" + this.curMod.Name + ")") : ""));
+			if (!string.IsNullOrEmpty(this.vin)) { lines.Add("VIN: " + this.vin); }
+			lines.Add((fi ? "Aika: " : "Time: ") + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+			lines.Add("");
+			foreach (ZoneView v in this.views)
+			{
+				List<Field> flds = new List<Field>();
+				foreach (Field f in v.Zone.Fields) { if (f.ByteStart + off < v.Bytes.Length) { flds.Add(f); } }
+				if (flds.Count > 0)
+				{
+					lines.Add(v.Zone.Id + "  " + v.Zone.Name);
+					foreach (Field f in flds) { lines.Add("    " + f.L(this.lang) + ": " + this.DecodeField(this.curMod, f, v.Bytes)); }
+				}
+				else { lines.Add(v.Zone.Id + "  " + v.Zone.Name + "   [raw " + v.OrigHex + "]"); }
+			}
+			this.ShowReport((fi ? "Luettu konfiguraatio" : "Read configuration"), lines, ((this.curMod != null) ? this.curMod.Id : "config") + "_" + (string.IsNullOrEmpty(this.vin) ? "config" : this.vin) + ".txt");
+		}
+
+		private void CompareBackups()
+		{
+			bool fi = this.lang == "fi";
+			string fa; string fb;
+			using (OpenFileDialog o1 = new OpenFileDialog())
+			{
+				string bdir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup"); if (Directory.Exists(bdir)) { o1.InitialDirectory = bdir; }
+				o1.Title = fi ? "Valitse 1. varmuuskopio (vanha)" : "Select 1st backup (old)"; o1.Filter = "Backup CSV|*.csv|All files|*.*";
+				if (o1.ShowDialog(this) != DialogResult.OK) { return; }
+				fa = o1.FileName;
+			}
+			using (OpenFileDialog o2 = new OpenFileDialog())
+			{
+				o2.InitialDirectory = Path.GetDirectoryName(fa); o2.Title = fi ? "Valitse 2. varmuuskopio (uusi)" : "Select 2nd backup (new)"; o2.Filter = "Backup CSV|*.csv|All files|*.*";
+				if (o2.ShowDialog(this) != DialogResult.OK) { return; }
+				fb = o2.FileName;
+			}
+			string ia; string ib;
+			Dictionary<string, string> da; Dictionary<string, string> db;
+			try { da = this.ParseBackup(fa, out ia); db = this.ParseBackup(fb, out ib); }
+			catch (Exception ex) { MessageBox.Show("CSV: " + ex.Message); return; }
+			Module mod = Data.Modules.FirstOrDefault((Module m) => m.Id.Equals(ia, StringComparison.OrdinalIgnoreCase));
+			List<string> lines = new List<string>();
+			lines.Add((fi ? "Vertailu" : "Compare") + ": " + Path.GetFileName(fa) + "  ->  " + Path.GetFileName(fb));
+			lines.Add("ECU: " + ia + ((ib != ia) ? (" / " + ib) : "") + ((mod != null) ? ("  (" + mod.Name + ")") : ""));
+			lines.Add("");
+			SortedSet<string> zones = new SortedSet<string>();
+			foreach (string k in da.Keys) { zones.Add(k); }
+			foreach (string k in db.Keys) { zones.Add(k); }
+			int diffs = 0;
+			foreach (string z in zones)
+			{
+				string va = da.ContainsKey(z) ? da[z] : null;
+				string vb = db.ContainsKey(z) ? db[z] : null;
+				if (va == vb) { continue; }
+				diffs++;
+				Zone zdef = (mod != null) ? mod.Zones.FirstOrDefault((Zone zz) => zz.Id.Equals(z, StringComparison.OrdinalIgnoreCase)) : null;
+				lines.Add(z + ((zdef != null) ? ("  " + zdef.Name) : "") + ":  " + (va ?? "-") + "  ->  " + (vb ?? "-"));
+				if (zdef != null && va != null && vb != null)
+				{
+					byte[] ba = Hex.ToBytes(va); byte[] bb = Hex.ToBytes(vb);
+					foreach (Field f in zdef.Fields)
+					{
+						string la = this.DecodeField(mod, f, ba); string lb2 = this.DecodeField(mod, f, bb);
+						if (la != null && lb2 != null && la != lb2) { lines.Add("      " + f.L(this.lang) + ": " + la + "  ->  " + lb2); }
+					}
+				}
+			}
+			if (diffs == 0) { lines.Add(fi ? "Ei eroja." : "No differences."); }
+			this.ShowReport((fi ? "Vertaa varmuuskopioita" : "Compare backups"), lines, "compare_" + ia + ".txt");
+		}
 		private void ShowDtc(string title, List<string> items, string raw)
 		{
 			Form form = new Form
@@ -4938,6 +5283,10 @@ int num = r.IndexOf("5902");
 
 		private Panel fieldsHost;
 
+			private TextBox txtSearch;
+
+			private Label lblSearch;
+
 		private CheckBox chkDecoded;
 
 		// Token: 0x0400004F RID: 79
@@ -4996,6 +5345,14 @@ int num = r.IndexOf("5902");
 
 		// Token: 0x04000061 RID: 97
 		private ToolStripMenuItem menuRip;
+
+			private ToolStripMenuItem menuView;
+
+			private ToolStripMenuItem menuProfiles;
+
+			private ToolStripMenuItem menuExport;
+
+			private ToolStripMenuItem menuCompare;
 	}
 	// Token: 0x02000016 RID: 22
 	internal static class Program
