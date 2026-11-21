@@ -437,6 +437,10 @@ namespace ZoneTool
 								{
 									Cfg.Pin = (text3 == "1" || text3.ToLower() == "true");
 								}
+								else if (a == "onlydecoded")
+								{
+									Cfg.OnlyDecoded = (text3 == "1" || text3.ToLower() == "true");
+								}
 							}
 						}
 					}
@@ -460,6 +464,8 @@ namespace ZoneTool
 				stringBuilder.AppendLine("port=" + Cfg.Port);
 				stringBuilder.AppendLine("# pin=1 enables the immobiliser PIN-read button (your own car only)");
 				stringBuilder.AppendLine("pin=" + (Cfg.Pin ? "1" : "0"));
+				stringBuilder.AppendLine("# onlydecoded=1 hides raw-hex-only zones and the raw hex string");
+				stringBuilder.AppendLine("onlydecoded=" + (Cfg.OnlyDecoded ? "1" : "0"));
 				File.WriteAllText(Cfg.Path_, stringBuilder.ToString(), new UTF8Encoding(false));
 			}
 			catch
@@ -478,6 +484,8 @@ namespace ZoneTool
 
 		// Token: 0x04000021 RID: 33
 		public static bool Pin = false;
+
+		public static bool OnlyDecoded = true;
 	}
 	// Token: 0x02000008 RID: 8
 	internal static class Sk
@@ -1481,10 +1489,30 @@ namespace ZoneTool
 			{
 				result = "54";
 			}
-			else
-			{
-				result = "";
-			}
+			else if (cmd.StartsWith("10C0"))
+				{
+					result = "50C0";
+				}
+				else if (cmd.StartsWith("1081"))
+				{
+					result = "5081";
+				}
+				else if (cmd.StartsWith("17"))
+				{
+					result = "5700";
+				}
+				else if (cmd.StartsWith("21") && cmd.Length >= 4)
+				{
+					result = "61" + cmd.Substring(2, 2) + new string('0', 512);
+				}
+				else if (cmd.StartsWith("3B") && cmd.Length >= 4)
+				{
+					result = "7B" + cmd.Substring(2, 2);
+				}
+				else
+				{
+					result = "";
+				}
 			return result;
 		}
 
@@ -2043,6 +2071,23 @@ namespace ZoneTool
 				this.logPanel.Visible = !this.logPanel.Visible;
 				this.UpdateLogBtn();
 			};
+			this.chkDecoded = new CheckBox
+			{
+				Left = 842,
+				Top = 13,
+				Width = 170,
+				AutoSize = false,
+				Checked = Cfg.OnlyDecoded,
+				ForeColor = Theme.Text,
+				BackColor = Theme.Panel,
+				FlatStyle = FlatStyle.Flat
+			};
+			this.chkDecoded.CheckedChanged += delegate(object s, EventArgs e)
+			{
+				Cfg.OnlyDecoded = this.chkDecoded.Checked;
+				Cfg.Save();
+				this.Render();
+			};
 			this.fiOn = Flags.Fi();
 			this.fiOff = Flags.Dim(this.fiOn);
 			this.gbOn = Flags.Gb();
@@ -2079,6 +2124,7 @@ namespace ZoneTool
 				this.btnConn,
 				this.lblStatus,
 				this.btnLog,
+				this.chkDecoded,
 				this.flagFi,
 				this.flagGb
 			});
@@ -2308,6 +2354,10 @@ namespace ZoneTool
 			Cfg.Load();
 			this.lang = Cfg.Lang;
 			this.btnPin.Visible = Cfg.Pin;
+			if (this.chkDecoded != null)
+			{
+				this.chkDecoded.Checked = Cfg.OnlyDecoded;
+			}
 			int num = this.cbTrans.Items.IndexOf(Cfg.Transport);
 			if (num >= 0)
 			{
@@ -2489,6 +2539,10 @@ namespace ZoneTool
 			if (this.btnLog != null && this.logPanel != null)
 			{
 				this.btnLog.Text = (this.logPanel.Visible ? ((this.lang == "fi") ? "Piilota loki" : "Hide log") : ((this.lang == "fi") ? "N\u00e4yt\u00e4 loki" : "Show log"));
+			}
+			if (this.chkDecoded != null)
+			{
+				this.chkDecoded.Text = ((this.lang == "fi") ? "Vain selke\u00e4t" : "Decoded only");
 			}
 		}
 
@@ -3785,6 +3839,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 					toolTip.SetToolTip(label, (text.Length > 1200) ? (text.Substring(0, 1200) + "\u2026") : text);
 					this.pnlFields.Controls.Add(label);
 				}
+				int hidden = 0;
 				using (List<ZoneView>.Enumerator enumerator = this.views.GetEnumerator())
 				{
 					while (enumerator.MoveNext())
@@ -3833,7 +3888,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 								ForeColor = Theme.Cyan,
 								BackColor = Theme.Panel,
 								Padding = new Padding(8, 4, 0, 0),
-								Text = string.Concat(new string[]
+								Text = (Cfg.OnlyDecoded ? (v.Zone.Id + "   " + v.Zone.Name) : string.Concat(new string[]
 								{
 									v.Zone.Id,
 									"   ",
@@ -3841,7 +3896,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									"      [",
 									v.OrigHex,
 									"]"
-								}),
+								})),
 								AutoEllipsis = true
 							};
 							this.pnlFields.Controls.Add(value);
@@ -3892,6 +3947,10 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							v.Fs.Add(field);
 							v.Cs.Add(control);
 						}
+						else if (Cfg.OnlyDecoded)
+						{
+							hidden++;
+						}
 						else
 						{
 							Panel panel2 = this.NewRow();
@@ -3920,6 +3979,22 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							v.RawBox = textBox;
 						}
 					}
+				}
+				if (Cfg.OnlyDecoded && hidden > 0)
+				{
+					Label hideNote = new Label
+					{
+						AutoSize = false,
+						Width = 1040,
+						Height = 24,
+						Margin = new Padding(2, 6, 2, 8),
+						ForeColor = Theme.Sub,
+						BackColor = Theme.Panel,
+						Padding = new Padding(8, 4, 0, 0),
+						AutoEllipsis = true,
+						Text = ((this.lang == "fi") ? (hidden + " raakazonea piilotettu \u2013 poista 'Vain selke\u00e4t' n\u00e4hd\u00e4ksesi ne.") : (hidden + " raw-only zones hidden \u2013 uncheck 'Decoded only' to see them."))
+					};
+					this.pnlFields.Controls.Add(hideNote);
 				}
 				this.pnlFields.ResumeLayout();
 			}
@@ -4862,6 +4937,8 @@ int num = r.IndexOf("5902");
 		private Panel logPanel;
 
 		private Panel fieldsHost;
+
+		private CheckBox chkDecoded;
 
 		// Token: 0x0400004F RID: 79
 		private Label lblStatus;
