@@ -7,3 +7,6 @@ tools/
 *.user
 # Local Diagbox-ripped data (proprietary, never publish)
 diagbox_overlay.json
+
+# local settings
+*.ini
