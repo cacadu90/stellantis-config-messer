@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -1477,7 +1477,11 @@ namespace ZoneTool
 			{
 				result = "6E" + cmd.Substring(2, 4);
 			}
-			else if (cmd.StartsWith("22") && cmd.Length >= 6)
+			else if (cmd.StartsWith("21") && cmd.Length >= 4)
+            {
+                result = "61" + cmd.Substring(2, 2) + new string('0', 160);
+            }
+            else if (cmd.StartsWith("22") && cmd.Length >= 6)
 			{
 				result = "62" + cmd.Substring(2, 4) + new string('0', 160);
 			}
@@ -3468,9 +3472,9 @@ namespace ZoneTool
 		private bool OpenSession()
 		{
 			this.trans.SelectEcu(this.curMod.Tx, this.curMod.Rx);
-			string openCmd = (this.curMod.Id == "BSI2004") ? "10C0" : "1003"; string text = this.Tx(openCmd, 1200);
+			string openCmd = ((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "10C0" : "1003"; string text = this.Tx(openCmd, 1200);
 			bool result;
-			if (!text.Contains((this.curMod.Id == "BSI2004") ? "50C0" : "5003"))
+			if (!text.Contains(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "50C0" : "5003"))
 			{
 				this.L("VIRHE/ERROR 1003 -> " + text);
 				result = false;
@@ -3539,7 +3543,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									list.Add(zoneView);
 								}
 							}
-							this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+							this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -3633,7 +3637,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									}
 								}
 							}
-							this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+							this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -4242,7 +4246,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									int num = text2.IndexOf("6703");
 									if (num < 0)
 									{
-										this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 										this.L("VIRHE/ERROR: no seed.");
 									}
 									else
@@ -4251,7 +4255,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 										string str2 = Sk.Key(this.curMod.Key, chg);
 										if (!this.Tx("2704" + str2, 800).Contains("6704"))
 										{
-											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 											this.L("VIRHE/ERROR: unlock rejected (wrong key?).");
 										}
 										else
@@ -4316,7 +4320,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 													}
 												}
 											}
-											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 											this.Render();
 											MessageBox.Show(string.Concat(new object[]
 											{
@@ -4334,7 +4338,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							{
 								try
 								{
-									this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+									this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 								}
 								catch
 								{
@@ -4479,7 +4483,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 										}
 										if (list2.Count == 0)
 										{
-											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 											this.BeginInvoke(new Action(delegate()
 											{
 												MessageBox.Show((this.lang == "fi") ? "Kaikki zonet jo backupin mukaiset." : "All zones already match the backup.");
@@ -4534,7 +4538,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 											}));
 											if (!proceed)
 											{
-												this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+												this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 											}
 											else
 											{
@@ -4542,7 +4546,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 												int num4 = text6.IndexOf("6703");
 												if (num4 < 0)
 												{
-													this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+													this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 													this.L("VIRHE/ERROR: no seed.");
 												}
 												else
@@ -4551,7 +4555,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 													string str2 = Sk.Key(mod.Key, chg);
 													if (!this.Tx("2704" + str2, 800).Contains("6704"))
 													{
-														this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+														this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 														this.L("VIRHE/ERROR: unlock rejected (wrong/unknown key?).");
 													}
 													else
@@ -4583,7 +4587,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 																}
 															}
 														}
-														this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+														this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 													}
 												}
 											}
@@ -4594,7 +4598,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 								{
 									try
 									{
-										this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 									}
 									catch
 									{
@@ -4949,8 +4953,8 @@ int num = r.IndexOf("5902");
 
 		private string ReadZoneRaw(ITransport tr, string zone)
 		{
-			string r = tr.Send("22" + zone, new string[] { "62" + zone, "7F22" }, 900);
-			int i = r.IndexOf("62" + zone);
+			bool kwp = (zone.Length == 2); string r = tr.Send((kwp ? "21" : "22") + zone, new string[] { (kwp ? "61" : "62") + zone, kwp ? "7F21" : "7F22" }, 900);
+			int i = r.IndexOf((kwp ? "61" : "62") + zone);
 			if (i < 0) { return null; }
 			return r.Substring(i + 2 + zone.Length);
 		}
@@ -5219,12 +5223,12 @@ int num = r.IndexOf("5902");
 					{
 						if (clear)
 						{
-							string text = this.Tx((this.curMod.Id == "BSI2004") ? "14FF00" : "14FFFFFF", 1500);
+							string text = this.Tx(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "14FF00" : "14FFFFFF", 1500);
 							this.L(text.Contains("54") ? "DTC cleared (54)." : ("Clear: " + text));
 							Thread.Sleep(300);
 						}
-						string text2 = this.Tx((this.curMod.Id == "BSI2004") ? "17FF00" : "19020C", 1500);
-						this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
+						string text2 = this.Tx(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "17FF00" : "19020C", 1500);
+						this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004")) ? "1081" : "1001", 300);
 						this.L("DTC (" + this.curMod.Id + "): " + text2);
 						this.ShowDtc(((this.lang == "fi") ? "Vikakoodit: " : "DTCs: ") + this.curMod.Id, this.DtcDecode(text2), text2);
 					}
@@ -5361,7 +5365,7 @@ int num = r.IndexOf("5902");
 		[STAThread]
 		private static void Main()
 		{
-			Application.EnableVisualStyles();
+			Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException); Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { MessageBox.Show(e.Exception.ToString(), "Virhe"); };
 			Application.SetCompatibleTextRenderingDefault(false);
 			try
 			{
