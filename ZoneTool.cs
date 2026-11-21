@@ -2957,7 +2957,7 @@ namespace ZoneTool
 					"62F190",
 					"7F22"
 				}, 900);
-				int num = text.IndexOf("62F190");
+				int num = text.IndexOf("62F190"); if (num < 0) { text = this.trans.Send("21B0", new string[] { "61B0", "7F21" }, 900); num = text.IndexOf("61B0"); if (num >= 0) { text = "62F190" + text.Substring(num + 4); num = 0; } }
 				if (num >= 0)
 				{
 					string text2 = MainForm.AsciiOf(Hex.ToBytes(text.Substring(num + 6)));
@@ -3061,7 +3061,7 @@ namespace ZoneTool
 								if (!flag)
 								{
 									text = tr.Send("1003", null, 250);
-									flag = (text.Contains("5003") || text.Contains("7F10"));
+									flag = (text.Contains("5003") || text.Contains("7F10")); if (!flag && module.Id == "BSI2004") { text = tr.Send("10C0", null, 350); flag = (text.Contains("50C0") || text.Contains("7F10")); }
 								}
 							}
 							catch
@@ -3208,7 +3208,7 @@ namespace ZoneTool
 			{
 				tr.SelectEcu(tx, rx);
 				string text = tr.Send("22F190", null, 900);
-				int num = text.IndexOf("62F190");
+				int num = text.IndexOf("62F190"); if (num < 0) { text = this.trans.Send("21B0", new string[] { "61B0", "7F21" }, 900); num = text.IndexOf("61B0"); if (num >= 0) { text = "62F190" + text.Substring(num + 4); num = 0; } }
 				if (num < 0)
 				{
 					result = null;
@@ -3230,7 +3230,7 @@ namespace ZoneTool
 		private string RawF190(ITransport tr)
 		{
 			string text = tr.Send("22F190", null, 900);
-			int num = text.IndexOf("62F190");
+			int num = text.IndexOf("62F190"); if (num < 0) { text = this.trans.Send("21B0", new string[] { "61B0", "7F21" }, 900); num = text.IndexOf("61B0"); if (num >= 0) { text = "62F190" + text.Substring(num + 4); num = 0; } }
 			if (num < 0)
 			{
 				return null;
@@ -3383,9 +3383,9 @@ namespace ZoneTool
 		private bool OpenSession()
 		{
 			this.trans.SelectEcu(this.curMod.Tx, this.curMod.Rx);
-			string text = this.Tx("1003", 1200);
+			string openCmd = (this.curMod.Id == "BSI2004") ? "10C0" : "1003"; string text = this.Tx(openCmd, 1200);
 			bool result;
-			if (!text.Contains("5003"))
+			if (!text.Contains((this.curMod.Id == "BSI2004") ? "50C0" : "5003"))
 			{
 				this.L("VIRHE/ERROR 1003 -> " + text);
 				result = false;
@@ -3405,24 +3405,15 @@ namespace ZoneTool
 
 		// Token: 0x06000085 RID: 133 RVA: 0x00008584 File Offset: 0x00006784
 		private string ReadZone(string zone, int ms)
-		{
-			string text = this.trans.Send("22" + zone, new string[]
-			{
-				"62" + zone,
-				"7F22"
-			}, ms);
-			int num = text.IndexOf("62" + zone);
-			string result;
-			if (num < 0)
-			{
-				result = null;
-			}
-			else
-			{
-				result = text.Substring(num + 2 + zone.Length);
-			}
-			return result;
-		}
+{
+bool kwp = (zone.Length == 2);
+string req = kwp ? ("21" + zone) : ("22" + zone);
+string okPrefix = kwp ? ("61" + zone) : ("62" + zone);
+string errPrefix = kwp ? "7F21" : "7F22";
+string text = this.trans.Send(req, new string[] { okPrefix, errPrefix }, ms);
+int num = text.IndexOf(okPrefix);
+return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
+}
 
 		// Token: 0x06000086 RID: 134 RVA: 0x00008A1C File Offset: 0x00006C1C
 		private void DoReadAll()
@@ -3438,7 +3429,7 @@ namespace ZoneTool
 					try
 					{
 						this.trans.SelectEcu(mod.Tx, mod.Rx);
-						if (!this.Tx("1003", 1200).Contains("5003"))
+						if (!this.Tx((mod.Id == "BSI2004") ? "10C0" : "1003", 1200).Contains((mod.Id == "BSI2004") ? "50C0" : "5003"))
 						{
 							this.L("VIRHE/ERROR 1003.");
 						}
@@ -3463,7 +3454,7 @@ namespace ZoneTool
 									list.Add(zoneView);
 								}
 							}
-							this.Tx("1001", 300);
+							this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -3509,26 +3500,21 @@ namespace ZoneTool
 					try
 					{
 						this.trans.SelectEcu(mod.Tx, mod.Rx);
-						if (!this.Tx("1003", 1200).Contains("5003"))
+						if (!this.Tx((mod.Id == "BSI2004") ? "10C0" : "1003", 1200).Contains((mod.Id == "BSI2004") ? "50C0" : "5003"))
 						{
 							this.L("VIRHE/ERROR 1003.");
 						}
 						else
 						{
-							int[] array = new int[]
-							{
-								8448,
-								8704,
-								8960
-							};
-							int num = array.Length * 256;
+							bool isKwpScan = (mod.Id == "BSI2004"); int[] array = isKwpScan ? new int[] { 0x80 } : new int[] { 8448, 8704, 8960 }; int stepCount = isKwpScan ? 128 : 256;
+							int num = array.Length * stepCount;
 							int num2 = 0;
 							foreach (int num3 in array)
 							{
-								for (int j = 0; j < 256; j++)
+								for (int j = 0; j < stepCount; j++)
 								{
 									num2++;
-									string zid = (num3 + j).ToString("X4");
+									string zid = isKwpScan ? (num3 + j).ToString("X2") : (num3 + j).ToString("X4");
 									if (num2 % 16 == 0)
 									{
 										this.Status(string.Concat(new object[]
@@ -3562,7 +3548,7 @@ namespace ZoneTool
 									}
 								}
 							}
-							this.Tx("1001", 300);
+							this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -4144,7 +4130,7 @@ namespace ZoneTool
 									int num = text2.IndexOf("6703");
 									if (num < 0)
 									{
-										this.Tx("1001", 300);
+										this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 										this.L("VIRHE/ERROR: no seed.");
 									}
 									else
@@ -4153,7 +4139,7 @@ namespace ZoneTool
 										string str2 = Sk.Key(this.curMod.Key, chg);
 										if (!this.Tx("2704" + str2, 800).Contains("6704"))
 										{
-											this.Tx("1001", 300);
+											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											this.L("VIRHE/ERROR: unlock rejected (wrong key?).");
 										}
 										else
@@ -4178,7 +4164,7 @@ namespace ZoneTool
 														" - ohitettu."
 													}));
 												}
-												else if (!this.Tx("2E" + id + text, 2000).Contains("6E" + id))
+												else if (!this.Tx((((id).Length == 2) ? "3B" : "2E") + id + text, 2000).Contains((((id).Length == 2) ? "7B" : "6E") + id))
 												{
 													this.L("VIRHE " + id + ": kirjoitus hyl\u00e4tty.");
 												}
@@ -4218,7 +4204,7 @@ namespace ZoneTool
 													}
 												}
 											}
-											this.Tx("1001", 300);
+											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											this.Render();
 											MessageBox.Show(string.Concat(new object[]
 											{
@@ -4236,7 +4222,7 @@ namespace ZoneTool
 							{
 								try
 								{
-									this.Tx("1001", 300);
+									this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 								}
 								catch
 								{
@@ -4340,7 +4326,7 @@ namespace ZoneTool
 								try
 								{
 									this.trans.SelectEcu(mod.Tx, mod.Rx);
-									if (!this.Tx("1003", 1200).Contains("5003"))
+									if (!this.Tx((mod.Id == "BSI2004") ? "10C0" : "1003", 1200).Contains((mod.Id == "BSI2004") ? "50C0" : "5003"))
 									{
 										this.L("VIRHE/ERROR 1003.");
 									}
@@ -4381,7 +4367,7 @@ namespace ZoneTool
 										}
 										if (list2.Count == 0)
 										{
-											this.Tx("1001", 300);
+											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											this.BeginInvoke(new Action(delegate()
 											{
 												MessageBox.Show((this.lang == "fi") ? "Kaikki zonet jo backupin mukaiset." : "All zones already match the backup.");
@@ -4436,7 +4422,7 @@ namespace ZoneTool
 											}));
 											if (!proceed)
 											{
-												this.Tx("1001", 300);
+												this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											}
 											else
 											{
@@ -4444,7 +4430,7 @@ namespace ZoneTool
 												int num4 = text6.IndexOf("6703");
 												if (num4 < 0)
 												{
-													this.Tx("1001", 300);
+													this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 													this.L("VIRHE/ERROR: no seed.");
 												}
 												else
@@ -4453,14 +4439,14 @@ namespace ZoneTool
 													string str2 = Sk.Key(mod.Key, chg);
 													if (!this.Tx("2704" + str2, 800).Contains("6704"))
 													{
-														this.Tx("1001", 300);
+														this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 														this.L("VIRHE/ERROR: unlock rejected (wrong/unknown key?).");
 													}
 													else
 													{
 														foreach (KeyValuePair<string, string> keyValuePair in list2)
 														{
-															if (!this.Tx("2E" + keyValuePair.Key + keyValuePair.Value, 2000).Contains("6E" + keyValuePair.Key))
+															if (!this.Tx((((keyValuePair.Key).Length == 2) ? "3B" : "2E") + keyValuePair.Key + keyValuePair.Value, 2000).Contains((((keyValuePair.Key).Length == 2) ? "7B" : "6E") + keyValuePair.Key))
 															{
 																this.L("VIRHE " + keyValuePair.Key + ": write rejected.");
 															}
@@ -4485,7 +4471,7 @@ namespace ZoneTool
 																}
 															}
 														}
-														this.Tx("1001", 300);
+														this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 													}
 												}
 											}
@@ -4496,7 +4482,7 @@ namespace ZoneTool
 								{
 									try
 									{
-										this.Tx("1001", 300);
+										this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 									}
 									catch
 									{
@@ -4670,7 +4656,29 @@ namespace ZoneTool
 		{
 			List<string> list = new List<string>();
 			r = (r ?? "").Replace(" ", "");
-			int num = r.IndexOf("5902");
+			int kwpIdx = r.IndexOf("57");
+if (r.IndexOf("5902") < 0 && kwpIdx >= 0 && r.Length >= kwpIdx + 4)
+{
+int count = 0;
+try { count = Convert.ToInt32(r.Substring(kwpIdx + 2, 2), 16); } catch { }
+string kwpData = r.Substring(kwpIdx + 4);
+for (int ci = 0; ci < count && (ci * 6 + 6) <= kwpData.Length; ci++)
+{
+int ki = ci * 6;
+string rawCode = kwpData.Substring(ki, 4);
+string stByte = kwpData.Substring(ki + 4, 2);
+string shortCode = rawCode.Substring(1);
+string desc = "";
+if (Data.Dtc != null)
+{
+if (!Data.Dtc.TryGetValue(shortCode, out desc))
+Data.Dtc.TryGetValue(rawCode, out desc);
+}
+list.Add(rawCode + " (" + shortCode + ") [" + stByte + "]" + (string.IsNullOrEmpty(desc) ? "" : (" - " + desc)));
+}
+return list;
+}
+int num = r.IndexOf("5902");
 			List<string> result;
 			if (num < 0)
 			{
@@ -4791,12 +4799,12 @@ namespace ZoneTool
 					{
 						if (clear)
 						{
-							string text = this.Tx("14FFFFFF", 1500);
+							string text = this.Tx((this.curMod.Id == "BSI2004") ? "14FF00" : "14FFFFFF", 1500);
 							this.L(text.Contains("54") ? "DTC cleared (54)." : ("Clear: " + text));
 							Thread.Sleep(300);
 						}
-						string text2 = this.Tx("19020C", 1500);
-						this.Tx("1001", 300);
+						string text2 = this.Tx((this.curMod.Id == "BSI2004") ? "17FF00" : "19020C", 1500);
+						this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 						this.L("DTC (" + this.curMod.Id + "): " + text2);
 						this.ShowDtc(((this.lang == "fi") ? "Vikakoodit: " : "DTCs: ") + this.curMod.Id, this.DtcDecode(text2), text2);
 					}
