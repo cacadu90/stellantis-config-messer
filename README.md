@@ -128,5 +128,5 @@ This project stands on the shoulders of the PSA reverse-engineering community:
 GPL-3.0 — see [LICENSE](LICENSE). (Derived in part from GPL-licensed PyPSADiag.)
 
 ### KWP2000 / Older PSA Support (2004–2010)
-- Added full KWP2000 definitions for **BSI2004** (Body Control), **CMB2004** (Instrument Cluster), and **EMF2004** (Multifunction Display) with English & Finnish descriptions.
+- Added full KWP2000 definitions for **BSI2004** (Body Control), **CMB2004** (Instrument Cluster), and **EMF2004** (Multifunction Display), **RD4_2004** (Radio/AUX), **CLIM_2004** (Climate Control), **AAS_2004** (Parking Aid), and **BSM_2004** (Engine Fusebox) with English & Finnish descriptions.
 - Added KWP2000 / BSI2004 fault code descriptions to dtc.json and KWP2000 Demo mode support.
