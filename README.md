@@ -45,6 +45,38 @@ a generic **ELM327** adapter, or **Demo** mode (browse every ECU and zone with n
 - Reads and shows the **VIN** in the title bar.
 - **Modern dark UI**, English / Finnish, and settings (language, interface, port) are
   remembered across restarts in `StellantisConfigMesser.ini`.
+- **Search box** to filter zones/fields by name, plus a **decoded-only** toggle that hides
+  raw-hex zones.
+
+## 2004–2010 support (KWP2000 / KWP-on-CAN)
+
+Older PSA ECUs (AEE2004) speak KWP2000 over CAN rather than UDS. The app handles both:
+
+- Full KWP2000 module definitions for **BSI2004** (body control), **CMB2004** (instrument
+  cluster), **EMF2004** (multifunction display), **RD4_2004** (radio/AUX), **CLIM_2004**
+  (climate), **AAS_2004** (parking aid) and **BSM_2004** (engine fusebox), with English &
+  Finnish field descriptions, plus their fault-code descriptions and Demo-mode support.
+- **KWP-on-CAN** read/write (session `10C0`, 2-hex zones via `21`/`3B`, configuration
+  security `27 83`/`27 84`).
+- **Classic BSI (2004)** tool (Tools menu) — pick the make (auto-detected from the VIN) and
+  model, and the app builds a KWP-on-CAN BSI2004 module, preferring the open PSA-RE field
+  layout for decoding.
+
+## Open telecoding data (PSA-RE)
+
+Alongside the PyPSADiag maps, the app bundles **open, GPL-licensed** AEE2004 BSI telecoding
+maps converted from [prototux/PSA-RE](https://github.com/prototux/PSA-RE):
+
+- `bsi-open-zones.json` — fixed-bit config zones (80/81/82/B1/BA/FE).
+- `bsi-mapped-params.json` — the mapped parameter tables (84/87/B2–B9/BD/C0–CD/D2/D3).
+- **Build mapped zones (35-table)** tool (Tools menu) — reads the ECU's own parameter-presence
+  table (`35 <root> …`) and packs the supported parameters in the ECU's index order (sub-byte
+  params from the LSB, byte-aligned above), so only the fields the car actually supports are
+  shown. Offline it falls back to a best-effort pack-all.
+
+No proprietary Diagbox data is bundled. The **Diagbox DataRipper** (Tools menu) can also pull
+DTC descriptions (from the local Diagbox Firebird DB via its POLUXDATA string tables) and
+CAN2004 telecoding layouts — always from the user's own Diagbox install, never shipped here.
 
 ## Requirements
 
@@ -126,29 +158,3 @@ This project stands on the shoulders of the PSA reverse-engineering community:
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE). (Derived in part from GPL-licensed PyPSADiag.)
-
-### KWP2000 / Older PSA Support (2004–2010)
-- Added full KWP2000 definitions for **BSI2004** (Body Control), **CMB2004** (Instrument Cluster), and **EMF2004** (Multifunction Display), **RD4_2004** (Radio/AUX), **CLIM_2004** (Climate Control), **AAS_2004** (Parking Aid), and **BSM_2004** (Engine Fusebox) with English & Finnish descriptions.
-- Added KWP2000 / BSI2004 fault code descriptions to dtc.json and KWP2000 Demo mode support.
-
-### Open telecoding data from PSA-RE (AEE2004 BSI)
-- Bundles **open, GPL-licensed** AEE2004 BSI telecoding maps converted from
-  [prototux/PSA-RE](https://github.com/prototux/PSA-RE): `bsi-open-zones.json`
-  (fixed-bit config zones, 80/81/82/B1/BA/FE) and `bsi-mapped-params.json`
-  (the mapped parameter tables for 84/87/B2–B9/BD/C0–CD/D2/D3). No proprietary
-  Diagbox data is included.
-- **Classic BSI (2004)** tool — pick make (auto-detected from the VIN) + model and the app
-  builds a KWP-on-CAN BSI2004 module, preferring the open PSA-RE data for field layout.
-- **Build mapped zones (35-table)** tool — reads the ECU's own parameter-presence table
-  (`35 <root> …`) and packs the supported parameters in the ECU's index order
-  (sub-byte params from the LSB, byte-aligned above), so only the fields the car actually
-  supports are shown. Offline it falls back to a best-effort pack-all.
-- **KWP-on-CAN** read/write for the 2004 modules (session `10C0`, 2-hex zones via `21`/`3B`,
-  configuration security `27 83`/`27 84`).
-
-### Usability
-- **Search box** to filter zones/fields by name, and a **decoded-only** toggle to hide raw-hex zones.
-- **VIN → make** heuristic (WMI prefix) to seed the Classic BSI picker.
-- **Diagbox DataRipper** also extracts DTC descriptions from the local Diagbox Firebird DB
-  (resolved through its POLUXDATA string tables) and CAN2004 telecoding layouts — all from the
-  user's own Diagbox, never bundled.
