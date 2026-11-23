@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -28,7 +28,7 @@ namespace ZoneTool
 		// Token: 0x06000001 RID: 1 RVA: 0x00002050 File Offset: 0x00000250
 		public string L(string lang)
 		{
-			return (lang == "fi" && !string.IsNullOrEmpty(this.Fi)) ? this.Fi : this.En;
+			string s = (lang == "fi" && !string.IsNullOrEmpty(this.Fi)) ? this.Fi : this.En; if (!string.IsNullOrEmpty(s)) { int ci = s.IndexOf(" (CIROCCO", StringComparison.OrdinalIgnoreCase); if (ci >= 0) { s = s.Substring(0, ci); } } return s;
 		}
 
 		// Token: 0x04000001 RID: 1
@@ -46,7 +46,7 @@ namespace ZoneTool
 		// Token: 0x06000003 RID: 3 RVA: 0x00002094 File Offset: 0x00000294
 		public string L(string lang)
 		{
-			return (lang == "fi" && !string.IsNullOrEmpty(this.Fi)) ? this.Fi : this.En;
+			string s = (lang == "fi" && !string.IsNullOrEmpty(this.Fi)) ? this.Fi : this.En; if (!string.IsNullOrEmpty(s)) { int ci = s.IndexOf(" (CIROCCO", StringComparison.OrdinalIgnoreCase); if (ci >= 0) { s = s.Substring(0, ci); } } return s;
 		}
 
 		// Token: 0x04000004 RID: 4
@@ -374,6 +374,151 @@ namespace ZoneTool
 
 		// Token: 0x04000019 RID: 25
 		public static Dictionary<string, string> ZoneHints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+		// CAN2004 classic-BSI telecoding, keyed by platform code (D2, B5, ...). Loaded on demand.
+		public static Dictionary<string, List<Zone>> Can2004 = new Dictionary<string, List<Zone>>(StringComparer.OrdinalIgnoreCase);
+
+		public static Dictionary<string, string> Can2004Car = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+		// PSA-RE mapped-zone param definitions: zoneHex -> ordered list of params (index/len/type/label/values).
+		// Positions are NOT fixed; the app computes them at runtime from the ECU's own 35-table (see PackMapped).
+		public static Dictionary<string, List<MappedParam>> MappedParams = new Dictionary<string, List<MappedParam>>(StringComparer.OrdinalIgnoreCase);
+
+		public static void LoadMappedParams(string path)
+		{
+			if (!File.Exists(path))
+			{
+				return;
+			}
+			try
+			{
+				Dictionary<string, object> root = Data.D(new JavaScriptSerializer { MaxJsonLength = 83886080 }.DeserializeObject(File.ReadAllText(path, Encoding.UTF8)));
+				if (root == null || !root.ContainsKey("zones"))
+				{
+					return;
+				}
+				Dictionary<string, object> zs = Data.D(root["zones"]);
+				if (zs == null)
+				{
+					return;
+				}
+				foreach (KeyValuePair<string, object> ze in zs)
+				{
+					List<MappedParam> list = new List<MappedParam>();
+					foreach (object po in Data.Arr(ze.Value))
+					{
+						Dictionary<string, object> pd = Data.D(po);
+						if (pd == null)
+						{
+							continue;
+						}
+						MappedParam mp = new MappedParam
+						{
+							Index = (pd.ContainsKey("index") ? Convert.ToInt32(pd["index"]) : 0),
+							Len = (pd.ContainsKey("len") ? Convert.ToInt32(pd["len"]) : 1),
+							Type = Data.Pick(pd, new string[] { "type" }),
+							Label = Data.Pick(pd, new string[] { "label" })
+						};
+						if (pd.ContainsKey("values"))
+						{
+							foreach (object vo in Data.Arr(pd["values"]))
+							{
+								Dictionary<string, object> vd = Data.D(vo);
+								if (vd != null)
+								{
+									mp.Values.Add(new Opt { Val = Data.Pick(vd, new string[] { "val" }), En = Data.Pick(vd, new string[] { "en" }), Fi = Data.Pick(vd, new string[] { "en" }) });
+								}
+							}
+						}
+						list.Add(mp);
+					}
+					list.Sort(delegate(MappedParam a, MappedParam b) { return a.Index.CompareTo(b.Index); });
+					Data.MappedParams[ze.Key.ToUpper()] = list;
+				}
+			}
+			catch
+			{
+			}
+		}
+
+		public static void LoadCan2004(string path)
+		{
+			if (!File.Exists(path))
+			{
+				return;
+			}
+			try
+			{
+				Dictionary<string, object> root = Data.D(new JavaScriptSerializer { MaxJsonLength = 83886080 }.DeserializeObject(File.ReadAllText(path, Encoding.UTF8)));
+				if (root == null || !root.ContainsKey("platforms"))
+				{
+					return;
+				}
+				Dictionary<string, object> plats = Data.D(root["platforms"]);
+				if (plats == null)
+				{
+					return;
+				}
+				foreach (KeyValuePair<string, object> pe in plats)
+				{
+					Dictionary<string, object> pd = Data.D(pe.Value);
+					if (pd == null)
+					{
+						continue;
+					}
+					Data.Can2004Car[pe.Key] = (pd.ContainsKey("car") ? Data.S(pd["car"]) : pe.Key);
+					List<Zone> zlist = new List<Zone>();
+					if (pd.ContainsKey("zones"))
+					{
+						foreach (object zo in Data.Arr(pd["zones"]))
+						{
+							Dictionary<string, object> zd = Data.D(zo);
+							if (zd == null)
+							{
+								continue;
+							}
+							Zone zone = new Zone { Id = Data.S(zd["id"]), Name = (zd.ContainsKey("name") ? Data.S(zd["name"]) : Data.S(zd["id"])) };
+							if (zd.ContainsKey("fields"))
+							{
+								foreach (object fo in Data.Arr(zd["fields"]))
+								{
+									Dictionary<string, object> fd = Data.D(fo);
+									if (fd == null)
+									{
+										continue;
+									}
+									Field field = new Field
+									{
+										En = Data.Pick(fd, new string[] { "en", "name" }),
+										Fi = Data.Pick(fd, new string[] { "fi" }),
+										Type = Data.Pick(fd, new string[] { "type" }),
+										Mask = (fd.ContainsKey("mask") ? Data.S(fd["mask"]) : "FF"),
+										ByteStart = (fd.ContainsKey("byteStart") ? Convert.ToInt32(fd["byteStart"]) : 0)
+									};
+									if (fd.ContainsKey("options"))
+									{
+										foreach (object oo in Data.Arr(fd["options"]))
+										{
+											Dictionary<string, object> od = Data.D(oo);
+											if (od != null)
+											{
+												field.Options.Add(new Opt { En = Data.Pick(od, new string[] { "en", "name" }), Fi = Data.Pick(od, new string[] { "fi" }), Val = Data.Pick(od, new string[] { "val" }) });
+											}
+										}
+									}
+									zone.Fields.Add(field);
+								}
+							}
+							zlist.Add(zone);
+						}
+					}
+					Data.Can2004[pe.Key] = zlist;
+				}
+			}
+			catch
+			{
+			}
+		}
 
 		// Token: 0x0400001A RID: 26
 		public static int[] Sec1 = new int[]
@@ -1816,6 +1961,317 @@ namespace ZoneTool
 		}
 	}
 	// Token: 0x02000015 RID: 21
+	internal class Du8
+	{
+		private byte[] b;
+		private uint tableStart;
+		private uint dataStart;
+		private uint count;
+		public bool Ok;
+		public Du8(string path)
+		{
+			try
+			{
+				this.b = File.ReadAllBytes(path);
+				if (this.b.Length > 16 && this.b[0] == 0x14 && this.b[1] == 0x23 && this.b[2] == 0x14 && this.b[3] == 0x23)
+				{
+					this.tableStart = BitConverter.ToUInt32(this.b, 4);
+					this.dataStart = BitConverter.ToUInt32(this.b, 8);
+					this.count = BitConverter.ToUInt32(this.b, 12);
+					this.Ok = (this.tableStart > 0 && this.dataStart > this.tableStart && this.count > 0);
+				}
+			}
+			catch
+			{
+				this.Ok = false;
+			}
+		}
+		private uint OffAt(long i)
+		{
+			long p = (long)this.tableStart + i * 4L;
+			if (i < 0 || p + 4L > this.b.Length)
+			{
+				return 0u;
+			}
+			return BitConverter.ToUInt32(this.b, (int)p);
+		}
+		// Resolve a 1-based P token to its string (empty on failure).
+		public string Resolve(int pToken)
+		{
+			if (!this.Ok)
+			{
+				return "";
+			}
+			long i = (long)pToken - 1L;
+			if (i < 0L || i >= (long)this.count)
+			{
+				return "";
+			}
+			uint o = this.OffAt(i);
+			if (o == 0u)
+			{
+				return "";
+			}
+			if (o < this.dataStart)
+			{
+				o += this.dataStart;
+			}
+			uint e = o;
+			for (long j = i + 1L; j < i + 8L && j < (long)this.count; j++)
+			{
+				uint no = this.OffAt(j);
+				if (no != 0u)
+				{
+					if (no < this.dataStart)
+					{
+						no += this.dataStart;
+					}
+					if (no > o)
+					{
+						e = no;
+						break;
+					}
+				}
+			}
+			if (e <= o || e > this.b.Length)
+			{
+				e = (uint)Math.Min((long)o + 160L, (long)this.b.Length);
+			}
+			try
+			{
+				string s = Encoding.UTF8.GetString(this.b, (int)o, (int)(e - o));
+				int nul = s.IndexOf('\0');
+				if (nul >= 0)
+				{
+					s = s.Substring(0, nul);
+				}
+				return s.Trim();
+			}
+			catch
+			{
+				return "";
+			}
+		}
+	}
+	// Minimal Firebird 2.5 embedded query (ported verbatim from the proven fbq.exe). x86 only.
+	internal static class DiagboxDb
+	{
+		private const int SQLDA_VERSION1 = 1;
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_attach_database(int[] status, short dbLen, byte[] db, ref int dbh, short dpbLen, byte[] dpb);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_detach_database(int[] status, ref int dbh);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_start_transaction(int[] status, ref int tr, short count, ref int dbh, short tpbLen, byte[] tpb);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_commit_transaction(int[] status, ref int tr);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_dsql_allocate_statement(int[] status, ref int dbh, ref int stmt);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_dsql_prepare(int[] status, ref int tr, ref int stmt, short len, byte[] sql, short dialect, IntPtr sqlda);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_dsql_describe(int[] status, ref int stmt, short daVer, IntPtr sqlda);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_dsql_execute(int[] status, ref int tr, ref int stmt, short daVer, IntPtr sqlda);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_dsql_fetch(int[] status, ref int stmt, short daVer, IntPtr sqlda);
+		[DllImport("fbclient.dll", CallingConvention = CallingConvention.Cdecl)]
+		private static extern int isc_dsql_free_statement(int[] status, ref int stmt, short option);
+		[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+		private static extern bool SetDllDirectory(string lpPathName);
+
+		private static bool Err(int[] s)
+		{
+			return s[0] == 1 && s[1] != 0;
+		}
+		private const int XSQLDA_HDR = 20;
+		private const int XSQLVAR = 152;
+		private static IntPtr AllocSqlda(int n)
+		{
+			int sz = XSQLDA_HDR + n * XSQLVAR;
+			IntPtr p = Marshal.AllocHGlobal(sz);
+			for (int i = 0; i < sz; i++)
+			{
+				Marshal.WriteByte(p, i, 0);
+			}
+			Marshal.WriteInt16(p, 0, 1);
+			Marshal.WriteInt16(p, 16, (short)n);
+			return p;
+		}
+		private static short Sqld(IntPtr d)
+		{
+			return Marshal.ReadInt16(d, 18);
+		}
+		private static int VarOff(int i)
+		{
+			return XSQLDA_HDR + i * XSQLVAR;
+		}
+		private static void AddStr(List<byte> dpb, int tag, string val)
+		{
+			byte[] v = Encoding.ASCII.GetBytes(val);
+			dpb.Add((byte)tag);
+			dpb.Add((byte)v.Length);
+			dpb.AddRange(v);
+		}
+		// Runs sql against db; sets fbDir on the DLL search path first. Returns rows of string columns.
+		public static List<string[]> Query(string fbDir, string db, string sql)
+		{
+			SetDllDirectory(fbDir);
+			List<string[]> rows = new List<string[]>();
+			int[] st = new int[20];
+			int dbh = 0;
+			int tr = 0;
+			int stmt = 0;
+			List<byte> dpb = new List<byte>();
+			dpb.Add(1);
+			AddStr(dpb, 28, "SYSDBA");
+			AddStr(dpb, 29, "masterke");
+			byte[] dpbA = dpb.ToArray();
+			byte[] dbA = Encoding.ASCII.GetBytes(db);
+			if (isc_attach_database(st, (short)dbA.Length, dbA, ref dbh, (short)dpbA.Length, dpbA) != 0 || Err(st))
+			{
+				throw new Exception("Firebird ATTACH failed (ei GPC.FDB / fbclient?)");
+			}
+			byte[] tpb = new byte[] { 3, 15, 17, 7, 8 };
+			IntPtr da = IntPtr.Zero;
+			try
+			{
+				if (isc_start_transaction(st, ref tr, 1, ref dbh, (short)tpb.Length, tpb) != 0 || Err(st))
+				{
+					throw new Exception("Firebird TX failed");
+				}
+				if (isc_dsql_allocate_statement(st, ref dbh, ref stmt) != 0 || Err(st))
+				{
+					throw new Exception("Firebird ALLOC failed");
+				}
+				da = AllocSqlda(50);
+				byte[] sqlA = Encoding.GetEncoding(1252).GetBytes(sql);
+				if (isc_dsql_prepare(st, ref tr, ref stmt, (short)sqlA.Length, sqlA, 3, da) != 0 || Err(st))
+				{
+					throw new Exception("Firebird PREPARE failed");
+				}
+				short cols = Sqld(da);
+				if (cols > 50)
+				{
+					Marshal.FreeHGlobal(da);
+					da = AllocSqlda(cols);
+					if (isc_dsql_describe(st, ref stmt, 1, da) != 0 || Err(st))
+					{
+						throw new Exception("Firebird DESCRIBE failed");
+					}
+				}
+				IntPtr[] dataPtr = new IntPtr[cols];
+				IntPtr[] indPtr = new IntPtr[cols];
+				bool[] isBlob = new bool[cols];
+				int[] maxLen = new int[cols];
+				for (int i = 0; i < cols; i++)
+				{
+					int vo = VarOff(i);
+					short ot = Marshal.ReadInt16(da, vo);
+					short ol = Marshal.ReadInt16(da, vo + 6);
+					int baset = (int)ot & -2;
+					if (baset == 520 || baset == 521)
+					{
+						isBlob[i] = true;
+						maxLen[i] = 16;
+						Marshal.WriteInt16(da, vo, (short)((int)ot | 1));
+						dataPtr[i] = Marshal.AllocHGlobal(16);
+						indPtr[i] = Marshal.AllocHGlobal(2);
+					}
+					else
+					{
+						short useLen = (baset == 448 || baset == 452) ? ((ol > 0) ? ol : (short)256) : (short)128;
+						Marshal.WriteInt16(da, vo, 449);
+						Marshal.WriteInt16(da, vo + 6, useLen);
+						maxLen[i] = (int)useLen;
+						dataPtr[i] = Marshal.AllocHGlobal((int)useLen * 4 + 8);
+						indPtr[i] = Marshal.AllocHGlobal(2);
+					}
+					Marshal.WriteIntPtr(da, vo + 8, dataPtr[i]);
+					Marshal.WriteIntPtr(da, vo + 12, indPtr[i]);
+				}
+				if (isc_dsql_execute(st, ref tr, ref stmt, 1, IntPtr.Zero) != 0 || Err(st))
+				{
+					throw new Exception("Firebird EXECUTE failed");
+				}
+				while (isc_dsql_fetch(st, ref stmt, 1, da) == 0)
+				{
+					string[] row = new string[cols];
+					for (int i = 0; i < cols; i++)
+					{
+						short ind = Marshal.ReadInt16(indPtr[i], 0);
+						if (ind == -1)
+						{
+							row[i] = "";
+						}
+						else if (isBlob[i])
+						{
+							row[i] = "[BLOB]";
+						}
+						else
+						{
+							int len = Marshal.ReadInt16(dataPtr[i], 0);
+							if (len < 0)
+							{
+								len = 0;
+							}
+							if (len > maxLen[i])
+							{
+								len = maxLen[i];
+							}
+							byte[] bb = new byte[len];
+							Marshal.Copy(IntPtr.Add(dataPtr[i], 2), bb, 0, len);
+							row[i] = Encoding.GetEncoding(1252).GetString(bb).TrimEnd();
+						}
+					}
+					rows.Add(row);
+				}
+				for (int i = 0; i < cols; i++)
+				{
+					if (dataPtr[i] != IntPtr.Zero)
+					{
+						Marshal.FreeHGlobal(dataPtr[i]);
+					}
+					if (indPtr[i] != IntPtr.Zero)
+					{
+						Marshal.FreeHGlobal(indPtr[i]);
+					}
+				}
+			}
+			finally
+			{
+				try
+				{
+					if (stmt != 0)
+					{
+						isc_dsql_free_statement(st, ref stmt, 2);
+					}
+					if (tr != 0)
+					{
+						isc_commit_transaction(st, ref tr);
+					}
+					isc_detach_database(st, ref dbh);
+					if (da != IntPtr.Zero)
+					{
+						Marshal.FreeHGlobal(da);
+					}
+				}
+				catch
+				{
+				}
+			}
+			return rows;
+		}
+	}
+	// A PSA-RE mapped-zone parameter (index/length/type/label/values). Byte position computed at runtime.
+	internal class MappedParam
+	{
+		public int Index;
+		public int Len;
+		public string Type;
+		public string Label;
+		public List<Opt> Values = new List<Opt>();
+	}
 	internal class MainForm : Form
 	{
 		// Token: 0x0600006E RID: 110 RVA: 0x00004E08 File Offset: 0x00003008
@@ -2291,6 +2747,12 @@ namespace ZoneTool
 			this.menuTools.DropDownItems.Add(this.menuExport);
 			this.menuTools.DropDownItems.Add(this.menuCompare);
 			this.menuTools.DropDownItems.Add(this.menuProfiles);
+			this.menuClassic = new ToolStripMenuItem();
+			this.menuClassic.Click += delegate(object s, EventArgs e) { this.ShowClassicBsi(); };
+			this.menuTools.DropDownItems.Add(this.menuClassic);
+			this.menuMapped = new ToolStripMenuItem();
+			this.menuMapped.Click += delegate(object s, EventArgs e) { this.BuildMappedZones(); };
+			this.menuTools.DropDownItems.Add(this.menuMapped);
 			this.menuTools.DropDownItems.Add(this.menuRestore);
 			this.menuTools.DropDownItems.Add(this.menuRip);
 			menuStrip.Items.Add(this.menuTools);
@@ -2556,6 +3018,8 @@ namespace ZoneTool
 				this.menuRip.Text = this.T("ripper");
 				if (this.menuView != null) { this.menuView.Text = (this.lang == "fi") ? "Varmuuskopion tarkastelu" : "View backup"; }
 				if (this.menuProfiles != null) { this.menuProfiles.Text = (this.lang == "fi") ? "Valmiit profiilit (kirjoita kaikki moduulit)" : "Ready profiles (write all modules)"; }
+				if (this.menuClassic != null) { this.menuClassic.Text = (this.lang == "fi") ? "Klassinen BSI (2004)..." : "Classic BSI (2004)..."; }
+				if (this.menuMapped != null) { this.menuMapped.Text = (this.lang == "fi") ? "Pura mapped-zonet (35-taulu)" : "Build mapped zones (35 table)"; }
 				if (this.menuExport != null) { this.menuExport.Text = (this.lang == "fi") ? "Vie luettu konfiguraatio (.txt)" : "Export read config (.txt)"; }
 				if (this.menuCompare != null) { this.menuCompare.Text = (this.lang == "fi") ? "Vertaa varmuuskopioita" : "Compare backups"; }
 			}
@@ -4242,8 +4706,8 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							{
 								if (this.OpenSession())
 								{
-									string text2 = this.Tx("2703", 800);
-									int num = text2.IndexOf("6703");
+									bool kwpSec = (this.curMod != null && this.curMod.Zones != null && this.curMod.Zones.Count > 0 && this.curMod.Zones[0].Id.Length == 2); string text2 = this.Tx(kwpSec ? "2783" : "2703", 800);
+									int num = text2.IndexOf(kwpSec ? "6783" : "6703");
 									if (num < 0)
 									{
 										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
@@ -4253,7 +4717,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									{
 										byte[] chg = Hex.ToBytes(text2.Substring(num + 4, 8));
 										string str2 = Sk.Key(this.curMod.Key, chg);
-										if (!this.Tx("2704" + str2, 800).Contains("6704"))
+										if (!this.Tx((kwpSec ? "2784" : "2704") + str2, 800).Contains(kwpSec ? "6784" : "6704"))
 										{
 											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
 											this.L("VIRHE/ERROR: unlock rejected (wrong key?).");
@@ -5350,6 +5814,10 @@ int num = r.IndexOf("5902");
 		// Token: 0x04000061 RID: 97
 		private ToolStripMenuItem menuRip;
 
+		private ToolStripMenuItem menuClassic;
+
+		private ToolStripMenuItem menuMapped;
+
 			private ToolStripMenuItem menuView;
 
 			private ToolStripMenuItem menuProfiles;
@@ -5357,6 +5825,608 @@ int num = r.IndexOf("5902");
 			private ToolStripMenuItem menuExport;
 
 			private ToolStripMenuItem menuCompare;
+
+		private string PromptText(string label, string def)
+		{
+			string res = "";
+			Form f = new Form { Text = "Config Messer", Width = 420, Height = 170, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, BackColor = Theme.Bg, ForeColor = Theme.Text };
+			Label l = new Label { Text = label, Left = 14, Top = 12, Width = 380, Height = 48, ForeColor = Theme.Text };
+			TextBox t = new TextBox { Left = 14, Top = 64, Width = 380, Text = def ?? "", BackColor = Theme.Input, ForeColor = Theme.Text };
+			Button ok = new Button { Text = "OK", Left = 214, Top = 95, Width = 85, Height = 28, DialogResult = DialogResult.OK, FlatStyle = FlatStyle.Flat, BackColor = Theme.Input, ForeColor = Theme.Text };
+			Button ca = new Button { Text = (this.lang == "fi") ? "Peru" : "Cancel", Left = 304, Top = 95, Width = 85, Height = 28, DialogResult = DialogResult.Cancel, FlatStyle = FlatStyle.Flat, BackColor = Theme.Input, ForeColor = Theme.Text };
+			f.Controls.Add(l);
+			f.Controls.Add(t);
+			f.Controls.Add(ok);
+			f.Controls.Add(ca);
+			f.AcceptButton = ok;
+			f.CancelButton = ca;
+			if (f.ShowDialog(this) == DialogResult.OK)
+			{
+				res = t.Text;
+			}
+			return res;
+		}
+
+		private Zone PackMapped(string zoneHex, List<int> presentIdx)
+		{
+			List<MappedParam> defs;
+			if (!Data.MappedParams.TryGetValue(zoneHex, out defs))
+			{
+				return null;
+			}
+			Dictionary<int, MappedParam> byIdx = new Dictionary<int, MappedParam>();
+			foreach (MappedParam mp in defs)
+			{
+				byIdx[mp.Index] = mp;
+			}
+			Zone z = new Zone { Id = zoneHex, Name = "Telecoding " + zoneHex + " (mapped)" };
+			int byteC = 0;
+			int bitC = 0;
+			bool unknown = false;
+			foreach (int idx in presentIdx)
+			{
+				MappedParam mp;
+				if (!byIdx.TryGetValue(idx, out mp))
+				{
+					unknown = true;
+					break; // unknown length -> cannot keep packing correctly
+				}
+				int L = mp.Len;
+				Field f = new Field { En = mp.Label, Fi = mp.Label, Type = ((mp.Type == "bool") ? "bool" : ((mp.Type == "uint") ? "hex" : "enum")) };
+				if (L >= 8)
+				{
+					if (bitC != 0) { byteC++; bitC = 0; }
+					f.ByteStart = byteC;
+					f.Mask = "FF";
+					byteC += (L + 7) / 8;
+					bitC = 0;
+				}
+				else
+				{
+					if (bitC + L > 8) { byteC++; bitC = 0; }
+					f.ByteStart = byteC;
+					int m = ((1 << L) - 1) << bitC;
+					f.Mask = m.ToString("X2");
+					bitC += L;
+					if (bitC >= 8) { byteC++; bitC = 0; }
+				}
+				foreach (Opt o in mp.Values)
+				{
+					f.Options.Add(o);
+				}
+				z.Fields.Add(f);
+			}
+			if (unknown)
+			{
+				z.Name += " [EPATASMA: tuntematon param-indeksi, positiot epavarmoja]";
+			}
+			return z;
+		}
+
+		private Dictionary<int, List<int>> ReadMappedTable(string root)
+		{
+			Dictionary<int, List<int>> res = new Dictionary<int, List<int>>();
+			List<byte> payload = new List<byte>();
+			for (int n = 1; n <= 40; n++)
+			{
+				string resp = this.Tx("35" + root + "0000" + n.ToString("X2") + "11", 1500);
+				if (string.IsNullOrEmpty(resp) || resp.Contains("7F35"))
+				{
+					break;
+				}
+				byte[] rb = Hex.ToBytes(resp);
+				if (rb.Length < 4)
+				{
+					break;
+				}
+				// positive response 75 <root> <seq> <data...>; byte index 2 == FF signals the last page.
+				bool last = (rb[2] == 0xFF);
+				for (int i = 3; i < rb.Length; i++)
+				{
+					payload.Add(rb[i]);
+				}
+				if (last)
+				{
+					break;
+				}
+			}
+			// parse records: [nibble][idx...] separated by FF
+			List<int> cur = null;
+			int curNib = -1;
+			bool first = true;
+			foreach (byte b in payload)
+			{
+				if (b == 0xFF)
+				{
+					if (curNib >= 0 && cur != null) { res[curNib] = cur; }
+					curNib = -1; cur = null; first = true;
+					continue;
+				}
+				if (first)
+				{
+					curNib = (b & 0x0F); cur = new List<int>(); first = false;
+				}
+				else
+				{
+					cur.Add((int)b);
+				}
+			}
+			if (curNib >= 0 && cur != null) { res[curNib] = cur; }
+			return res;
+		}
+
+		private void BuildMappedZones()
+		{
+			if (this.curMod == null || !this.Need())
+			{
+				return;
+			}
+			if (Data.MappedParams.Count == 0)
+			{
+				MessageBox.Show((this.lang == "fi") ? "Mapped-dataa ei ladattu (bsi-mapped-params.json)." : "No mapped data loaded.");
+				return;
+			}
+			this.busy = true;
+			this.SetButtons(false);
+			new Thread(delegate()
+			{
+				int added = 0;
+				bool offline = false;
+				try
+				{
+					this.trans.SelectEcu(this.curMod.Tx, this.curMod.Rx);
+					this.Tx("10C0", 1200);
+					Dictionary<int, List<int>> tbl = new Dictionary<int, List<int>>();
+					foreach (string rootg in new string[] { "B0", "C0", "D0" })
+					{
+						Dictionary<int, List<int>> t = this.ReadMappedTable(rootg);
+						foreach (KeyValuePair<int, List<int>> kv in t)
+						{
+							tbl[(Convert.ToInt32(rootg.Substring(0, 1), 16) << 4) | kv.Key] = kv.Value;
+						}
+					}
+					this.Tx("1081", 300);
+					if (tbl.Count == 0)
+					{
+						offline = true;
+						this.L("35-taulua ei saatu - offline-esikatselu (KAIKKI paramit, positiot approksimaatio).");
+					}
+					List<Zone> newZones = new List<Zone>();
+					foreach (KeyValuePair<string, List<MappedParam>> ze in Data.MappedParams)
+					{
+						int zoneByte = Convert.ToInt32(ze.Key, 16);
+						List<int> present;
+						if (offline)
+						{
+							present = new List<int>();
+							foreach (MappedParam mp in ze.Value) { present.Add(mp.Index); }
+						}
+						else if (!tbl.TryGetValue(zoneByte, out present) || present.Count == 0)
+						{
+							continue;
+						}
+						Zone z = this.PackMapped(ze.Key, present);
+						if (z != null && z.Fields.Count > 0) { newZones.Add(z); added += z.Fields.Count; }
+					}
+					this.BeginInvoke(new Action(delegate()
+					{
+						foreach (Zone z in newZones)
+						{
+							this.curMod.Zones.RemoveAll(delegate(Zone e) { return e.Id == z.Id; });
+							this.curMod.Zones.Add(z);
+						}
+						this.PopulateModules(this.shown);
+						MessageBox.Show(((this.lang == "fi") ? "Mapped-zonet purettu: " : "Mapped zones built: ") + newZones.Count + " zonea, " + added + ((this.lang == "fi") ? " kenttaa." : " fields.") + (offline ? ((this.lang == "fi") ? "\n(OFFLINE-approksimaatio - positiot EPAVARMAT ilman ECU:ta)" : "\n(OFFLINE approximation - positions UNCERTAIN without the ECU)") : ""));
+					}));
+				}
+				catch (Exception ex)
+				{
+					this.L("Mapped VIRHE: " + ex.Message);
+				}
+				finally
+				{
+					this.busy = false;
+					try { this.BeginInvoke(new Action(delegate() { this.SetButtons(true); })); } catch { }
+				}
+			}).Start();
+		}
+
+		private static List<string[]> Can2004Models()
+		{
+			return new List<string[]>
+			{
+				new string[] { "Peugeot", "207", "A7" },
+				new string[] { "Peugeot", "307", "T6" },
+				new string[] { "Peugeot", "407", "D2" },
+				new string[] { "Peugeot", "3008 / 5008 I", "T84" },
+				new string[] { "Peugeot", "Partner II", "B9" },
+				new string[] { "Peugeot", "Expert II", "G9" },
+				new string[] { "Peugeot", "Bipper", "Z9" },
+				new string[] { "Peugeot", "301", "A58" },
+				new string[] { "Citroen", "C4 I", "B5" },
+				new string[] { "Citroen", "C5 II", "X7" },
+				new string[] { "Citroen", "C6", "X6" },
+				new string[] { "Citroen", "Berlingo II", "B9" },
+				new string[] { "Citroen", "Jumpy II", "G9" },
+				new string[] { "Citroen", "Nemo", "Z9" },
+				new string[] { "Citroen", "C4 Picasso I", "LA" },
+				new string[] { "Citroen", "C-Elysee", "A58" }
+			};
+		}
+
+		private static string VinMake(string vin)
+		{
+			if (string.IsNullOrEmpty(vin) || vin.Length < 3)
+			{
+				return "";
+			}
+			string w = vin.Substring(0, 3).ToUpper();
+			if (w == "VF3" || w == "VR3")
+			{
+				return "Peugeot";
+			}
+			if (w == "VF7" || w == "VR7")
+			{
+				return "Citroen";
+			}
+			if (w == "VR1")
+			{
+				return "DS";
+			}
+			if (w == "W0V" || w == "W0L")
+			{
+				return "Opel";
+			}
+			return "";
+		}
+
+		private void LoadCan2004Platform(string plat)
+		{
+			// Prefer PSA-RE open data ("OPEN", correct byte.bit) over the Diagbox-ripped per-platform data.
+			List<Zone> zones;
+			if (!Data.Can2004.TryGetValue("OPEN", out zones) || zones.Count == 0)
+			{
+				if (!Data.Can2004.TryGetValue(plat, out zones) || zones.Count == 0)
+				{
+					MessageBox.Show((this.lang == "fi") ? ("Ei BSI-telekoodausdataa (" + plat + "). Odottaa PSA-RE-mergea / rippausta.") : ("No BSI telecoding data (" + plat + "). Awaiting PSA-RE merge / rip."));
+					return;
+				}
+			}
+			string car;
+			Data.Can2004Car.TryGetValue(plat, out car);
+			Module mod = new Module
+			{
+				Id = "BSI2004",
+				Name = "BSI 2004 " + plat + " " + (car ?? ""),
+				Tx = "752",
+				Rx = "652",
+				Key = "",
+				Trace = "no",
+				ByteOffset = 0,
+				Verified = false,
+				Zones = zones
+			};
+			List<Module> list = new List<Module> { mod };
+			foreach (Module m in this.shown)
+			{
+				if (m.Id != "BSI2004")
+				{
+					list.Add(m);
+				}
+			}
+			this.PopulateModules(list);
+			this.L((this.lang == "fi") ? ("Ladattu BSI (PSA-RE avoin, fixed-bits): " + plat + " " + (car ?? "") + " (" + zones.Count + " zonea, " + "113 kenttaa). Mapped-zonet piilossa kunnes pakkausalgo. Luku KWP 21<zone>, kirjoitus 3B + 2783/2784.") : ("Loaded BSI (PSA-RE open, fixed-bits): " + plat + " " + (car ?? "") + " (" + zones.Count + " zones). Mapped zones hidden until packing algo. Read KWP 21<zone>, write 3B + 2783/2784."));
+		}
+
+		private void ShowClassicBsi()
+		{
+			if (Data.Can2004.Count == 0)
+			{
+				Data.LoadCan2004(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "can2004-zones.json"));
+			}
+			if (Data.Can2004.Count == 0)
+			{
+				MessageBox.Show((this.lang == "fi") ? "CAN2004-dataa ei loytynyt (can2004-zones.json puuttuu).\nRippaa se ensin omasta Diagboxista." : "No CAN2004 data (can2004-zones.json missing).\nRip it from your Diagbox first.");
+				return;
+			}
+			List<string[]> models = Can2004Models();
+			Form dlg = new Form
+			{
+				Text = (this.lang == "fi") ? "Klassinen BSI (2004) - mallivalinta" : "Classic BSI (2004) - model",
+				Width = 440,
+				Height = 250,
+				StartPosition = FormStartPosition.CenterParent,
+				FormBorderStyle = FormBorderStyle.FixedDialog,
+				MaximizeBox = false,
+				MinimizeBox = false,
+				BackColor = Theme.Bg,
+				ForeColor = Theme.Text
+			};
+			Label l1 = new Label { Text = "VIN:", Left = 16, Top = 20, Width = 70, ForeColor = Theme.Text };
+			TextBox tv = new TextBox { Left = 90, Top = 17, Width = 300, BackColor = Theme.Input, ForeColor = Theme.Text };
+			if (!string.IsNullOrEmpty(this.vin))
+			{
+				tv.Text = this.vin;
+			}
+			Label l2 = new Label { Text = (this.lang == "fi") ? "Merkki:" : "Make:", Left = 16, Top = 60, Width = 70, ForeColor = Theme.Text };
+			ComboBox cbMake = new ComboBox { Left = 90, Top = 57, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Theme.Input, ForeColor = Theme.Text };
+			cbMake.Items.AddRange(new object[] { "Peugeot", "Citroen", "DS" });
+			Label l3 = new Label { Text = (this.lang == "fi") ? "Malli:" : "Model:", Left = 16, Top = 100, Width = 70, ForeColor = Theme.Text };
+			ComboBox cbModel = new ComboBox { Left = 90, Top = 97, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Theme.Input, ForeColor = Theme.Text };
+			EventHandler fill = delegate(object s, EventArgs e)
+			{
+				cbModel.Items.Clear();
+				string mk = (cbMake.SelectedItem ?? "").ToString();
+				foreach (string[] r in models)
+				{
+					if (r[0] == mk)
+					{
+						string tag = (Data.Can2004.ContainsKey("OPEN") || Data.Can2004.ContainsKey(r[2])) ? "" : ((this.lang == "fi") ? " (ei dataa)" : " (no data)");
+						cbModel.Items.Add(r[1] + " [" + r[2] + "]" + tag);
+					}
+				}
+				if (cbModel.Items.Count > 0)
+				{
+					cbModel.SelectedIndex = 0;
+				}
+			};
+			cbMake.SelectedIndexChanged += fill;
+			Button bDec = new Button { Text = (this.lang == "fi") ? "Tunnista merkki" : "Decode make", Left = 90, Top = 135, Width = 130, Height = 26, FlatStyle = FlatStyle.Flat, BackColor = Theme.Input, ForeColor = Theme.Text };
+			bDec.Click += delegate(object s, EventArgs e)
+			{
+				string mk = VinMake(tv.Text.Trim());
+				if (mk != "" && cbMake.Items.Contains(mk))
+				{
+					cbMake.SelectedItem = mk;
+				}
+				else
+				{
+					MessageBox.Show((this.lang == "fi") ? "Merkkia ei tunnistettu VINin WMI:sta (merkit 1-3)." : "Make not recognized from VIN WMI (chars 1-3).");
+				}
+			};
+			Button bOk = new Button { Text = "OK", Left = 200, Top = 175, Width = 90, Height = 28, DialogResult = DialogResult.OK, FlatStyle = FlatStyle.Flat, BackColor = Theme.Input, ForeColor = Theme.Text };
+			Button bCancel = new Button { Text = (this.lang == "fi") ? "Peru" : "Cancel", Left = 300, Top = 175, Width = 90, Height = 28, DialogResult = DialogResult.Cancel, FlatStyle = FlatStyle.Flat, BackColor = Theme.Input, ForeColor = Theme.Text };
+			dlg.Controls.Add(l1);
+			dlg.Controls.Add(tv);
+			dlg.Controls.Add(l2);
+			dlg.Controls.Add(cbMake);
+			dlg.Controls.Add(l3);
+			dlg.Controls.Add(cbModel);
+			dlg.Controls.Add(bDec);
+			dlg.Controls.Add(bOk);
+			dlg.Controls.Add(bCancel);
+			dlg.AcceptButton = bOk;
+			dlg.CancelButton = bCancel;
+			string mk0 = VinMake((this.vin ?? "").Trim());
+			if (mk0 != "" && cbMake.Items.Contains(mk0))
+			{
+				cbMake.SelectedItem = mk0;
+			}
+			else
+			{
+				cbMake.SelectedIndex = 0;
+			}
+			if (dlg.ShowDialog(this) == DialogResult.OK && cbModel.SelectedItem != null)
+			{
+				Match m = Regex.Match(cbModel.SelectedItem.ToString(), "\\[([A-Z0-9]+)\\]");
+				if (m.Success)
+				{
+					this.LoadCan2004Platform(m.Groups[1].Value);
+				}
+			}
+		}
+
+		private int DiagboxRipCan2004(string awroot)
+		{
+			string xmlDir = Path.Combine(awroot, "dtrd\\comm\\XMLTLCD");
+			if (!Directory.Exists(xmlDir))
+			{
+				return -1;
+			}
+			string[][] plats = new string[][]
+			{
+				new string[] { "D2", "Peugeot 407" }, new string[] { "B5", "Citroen C4 I" },
+				new string[] { "A7", "Peugeot 207" }, new string[] { "T6", "Peugeot 307" },
+				new string[] { "T84", "Peugeot 3008/5008 I" }, new string[] { "X7", "Citroen C5 II" },
+				new string[] { "B9", "Peugeot Partner / Citroen Berlingo II" }, new string[] { "G9", "Peugeot Expert / Citroen Jumpy II" },
+				new string[] { "X6", "Citroen C6" }, new string[] { "Z9", "Peugeot Bipper / Citroen Nemo" },
+				new string[] { "A58", "Peugeot 301 / Citroen C-Elysee" }, new string[] { "LA", "Citroen C4 Picasso I" }
+			};
+			Regex rDef = new Regex("<TlcdParameterDef[^>]*Name=\"(CFG_[^\"]+)\"[^>]*>(.*?)</TlcdParameterDef>", RegexOptions.Singleline);
+			Regex rLid = new Regex("Name=\"LID([0-9A-Fa-f]{2})_(\\d+)_([0-9A-Fa-f]{1,2})\"");
+			Regex rPfx = new Regex("^CFG_[A-Z0-9]+_BSI_");
+			Regex rSfx = new Regex("_\\d+$");
+			StringBuilder root = new StringBuilder();
+			root.Append("{\"platforms\":{");
+			bool firstP = true;
+			int platCount = 0;
+			int fieldCount = 0;
+			foreach (string[] pc in plats)
+			{
+				string path = Path.Combine(xmlDir, pc[0] + "_BSI.xml");
+				if (!File.Exists(path))
+				{
+					continue;
+				}
+				string txt = File.ReadAllText(path);
+				Dictionary<string, List<string>> zones = new Dictionary<string, List<string>>();
+				List<string> zorder = new List<string>();
+				foreach (Match dm in rDef.Matches(txt))
+				{
+					string cfg = dm.Groups[1].Value;
+					string body = dm.Groups[2].Value;
+					string zone = null;
+					int pos = -1;
+					bool bad = false;
+					List<int> vals = new List<int>();
+					foreach (Match lm in rLid.Matches(body))
+					{
+						string z = lm.Groups[1].Value.ToUpper();
+						int p = int.Parse(lm.Groups[2].Value);
+						int v = Convert.ToInt32(lm.Groups[3].Value, 16);
+						if (zone == null)
+						{
+							zone = z;
+							pos = p;
+						}
+						if (z != zone || p != pos)
+						{
+							bad = true;
+							break;
+						}
+						if (!vals.Contains(v))
+						{
+							vals.Add(v);
+						}
+					}
+					if (bad || zone == null || vals.Count < 1 || pos < 0 || pos > 255)
+					{
+						continue;
+					}
+					int mask = 0;
+					foreach (int v in vals)
+					{
+						mask |= v;
+					}
+					if (mask == 0)
+					{
+						mask = 255;
+					}
+					vals.Sort();
+					bool binary = (vals.Count == 2 && vals.Contains(0) && mask == 1);
+					string lab = rSfx.Replace(rPfx.Replace(cfg, ""), "").Replace("_", " ").Trim();
+					StringBuilder opts = new StringBuilder();
+					for (int i = 0; i < vals.Count; i++)
+					{
+						string lbl = binary ? ((vals[i] == 0) ? "Pois / Off" : "Paalla / On") : ("0x" + vals[i].ToString("X2"));
+						if (i > 0)
+						{
+							opts.Append(",");
+						}
+						opts.Append("{\"en\":\"" + MainForm.JsEsc(lbl) + "\",\"fi\":\"" + MainForm.JsEsc(lbl) + "\",\"val\":\"" + vals[i].ToString("X2") + "\"}");
+					}
+					string fld = "{\"en\":\"" + MainForm.JsEsc(lab) + "\",\"fi\":\"" + MainForm.JsEsc(lab) + "\",\"byteStart\":" + pos + ",\"mask\":\"" + mask.ToString("X2") + "\",\"type\":\"" + (binary ? "bool" : "enum") + "\",\"options\":[" + opts.ToString() + "]}";
+					if (!zones.ContainsKey(zone))
+					{
+						zones[zone] = new List<string>();
+						zorder.Add(zone);
+					}
+					zones[zone].Add(fld);
+					fieldCount++;
+				}
+				if (zorder.Count == 0)
+				{
+					continue;
+				}
+				zorder.Sort();
+				if (!firstP)
+				{
+					root.Append(",");
+				}
+				firstP = false;
+				root.Append("\"" + pc[0] + "\":{\"car\":\"" + MainForm.JsEsc(pc[1]) + "\",\"bus\":\"CAN2004-KWP\",\"zones\":[");
+				for (int zi = 0; zi < zorder.Count; zi++)
+				{
+					string z = zorder[zi];
+					if (zi > 0)
+					{
+						root.Append(",");
+					}
+					root.Append("{\"id\":\"" + z + "\",\"name\":\"Telecoding " + z + "\",\"read\":\"21" + z + "\",\"write\":\"3B" + z + "\",\"fields\":[" + string.Join(",", zones[z].ToArray()) + "]}");
+				}
+				root.Append("]}");
+				platCount++;
+			}
+			root.Append("}}");
+			string outp = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "can2004-zones.json");
+			File.WriteAllText(outp, root.ToString(), new UTF8Encoding(false));
+			Data.Can2004.Clear();
+			Data.Can2004Car.Clear();
+			Data.LoadCan2004(outp);
+			this.L(string.Concat(new object[] { "CAN2004 rip: ", platCount, " plattaria, ", fieldCount, " kenttaa -> can2004-zones.json" }));
+			return platCount;
+		}
+
+		private int DiagboxRipDtc(string awroot)
+		{
+			string fbDir = Path.Combine(awroot, "bin\\lib\\firebird250");
+			string gpc = Path.Combine(awroot, "dtrd\\comm\\data\\GPC.FDB");
+			string transDir = Path.Combine(awroot, "dtrd\\trans");
+			if (!File.Exists(gpc) || !Directory.Exists(fbDir) || !File.Exists(Path.Combine(fbDir, "fbclient.dll")))
+			{
+				this.L("DTC rip: GPC.FDB / fbclient.dll puuttuu.");
+				return -1;
+			}
+			string du8 = Path.Combine(transDir, (this.lang == "fi") ? "POLUXDATAfi_FI.DU8" : "POLUXDATAen_GB.DU8");
+			if (!File.Exists(du8))
+			{
+				du8 = Path.Combine(transDir, "POLUXDATAen_GB.DU8");
+			}
+			Du8 res = new Du8(du8);
+			if (!res.Ok)
+			{
+				this.L("DTC rip: POLUXDATA .DU8 ei auennut (" + du8 + ").");
+				return -2;
+			}
+			List<string[]> rows = DiagboxDb.Query(fbDir, gpc, "SELECT CAST(DTCNAME AS VARCHAR(16)), CAST(DTCLABEL AS VARCHAR(40)) FROM DTC");
+			Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			Regex tok = new Regex("@P(\\d+)-POLUXDATA");
+			foreach (string[] r in rows)
+			{
+				if (r.Length < 2)
+				{
+					continue;
+				}
+				string name = (r[0] ?? "").Trim();
+				if (name.Length < 2 || map.ContainsKey(name))
+				{
+					continue;
+				}
+				Match m = tok.Match(r[1] ?? "");
+				if (!m.Success)
+				{
+					continue;
+				}
+				int pnum;
+				if (!int.TryParse(m.Groups[1].Value, out pnum))
+				{
+					continue;
+				}
+				string desc = res.Resolve(pnum);
+				if (!string.IsNullOrEmpty(desc))
+				{
+					map[name] = desc;
+				}
+			}
+			int added = 0;
+			StringBuilder sb = new StringBuilder();
+			sb.Append("{\"dtc\":{");
+			bool first = true;
+			foreach (KeyValuePair<string, string> kv in map)
+			{
+				if (!Data.Dtc.ContainsKey(kv.Key))
+				{
+					Data.Dtc[kv.Key] = kv.Value;
+					added++;
+				}
+				if (!first)
+				{
+					sb.Append(",");
+				}
+				first = false;
+				sb.Append("\"" + MainForm.JsEsc(kv.Key) + "\":\"" + MainForm.JsEsc(kv.Value) + "\"");
+			}
+			sb.Append("}}");
+			try
+			{
+				File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "diagbox_dtc_ripped.json"), sb.ToString(), new UTF8Encoding(false));
+			}
+			catch
+			{
+			}
+			this.L(string.Concat(new object[] { "DTC rip: ", map.Count, " koodia resolvoitu, ", added, " uutta lisatty (loput olivat jo avoimessa dtc.json:ssa)." }));
+			return map.Count;
+		}
 	}
 	// Token: 0x02000016 RID: 22
 	internal static class Program
@@ -5386,6 +6456,9 @@ int num = r.IndexOf("5902");
 			try
 			{
 				Data.LoadOverlay(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "diagbox_overlay.json"));
+				Data.LoadCan2004(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "can2004-zones.json"));
+				Data.LoadCan2004(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bsi-open-zones.json"));
+				Data.LoadMappedParams(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bsi-mapped-params.json"));
 			}
 			catch
 			{

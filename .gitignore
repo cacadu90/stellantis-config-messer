@@ -11,3 +11,8 @@ diagbox_overlay.json
 # local settings
 *.ini
 bsi2004_diagbox.json
+# Diagbox-ripped / local data (proprietary or per-user, never publish)
+can2004-zones.json
+diagbox_dtc_ripped.json
+van-zones.json
+zones_v1_kasin.json
