@@ -26,7 +26,11 @@ function Shift([int]$maskByte) { $s = 0; $m = $maskByte; if ($m -eq 0) { return 
 function FiLabel([string]$en) {
   switch -regex ($en) {
     'Type of traction control' { 'Traktionhallinnan tyyppi (grip/ASR+)'; break }
+    'Lane Positioning Assist.*PUSH'  { 'Kaistakeskitys (LPA) - nappi'; break }
+    'Lane Positioning Assist.*LED'   { 'Kaistakeskitys (LPA) - LED'; break }
     'Lane Positioning Assist'   { 'Kaistakeskitys (LPA)'; break }
+    'Lane Keeping Assist.*PUSH'      { 'Kaistavahti (LKA) - nappi'; break }
+    'Lane Keeping Assist.*LED'       { 'Kaistavahti (LKA) - LED'; break }
     'Lane Keeping Assist'       { 'Kaistavahti (LKA)'; break }
     'descent control|HADC'      { "Alam${AE}kihallinta (HADC)"; break }
     'Adaptive Cruise|ACC Type'  { 'Mukautuva vakkari (ACC)'; break }
