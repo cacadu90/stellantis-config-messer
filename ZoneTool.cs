@@ -1363,7 +1363,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string Scan406D8AllPins()
         {
             if (!this.IsOpen) { string o = this.Open(""); if (!this.IsOpen) return "VCI ei auki: " + o; }
-            var sb = new StringBuilder("=== 1997 PEUGEOT 406 D8 TAYSI PINNI- & HERATESSKANNERI v2.4.0 ({2,16,232} OK!) ===\r\n");
+            var sb = new StringBuilder("=== 1997 PEUGEOT 406 D8 TAYSI PINNI- & HERATESSKANNERI v2.5.0 ({2,16,232} OK!) ===\r\n");
             int[] pins = new int[] { 7, 15, 11, 12, 13, 8, 3, 1 };
             byte[] addrs = new byte[] { 0x10, 0x13, 0x01, 0x33, 0x11, 0x7A, 0x68, 0x28 };
 
@@ -2007,7 +2007,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer v2.4.0 (+ PSA K-Line / MP 7.0)";
+			this.Text = "Stellantis Config Messer v2.5.0 (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
@@ -3008,7 +3008,7 @@ this.PopulateModules(Data.Modules);
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer v2.4.0 (+ PSA K-Line / MP 7.0)";
+					this.Text = "Stellantis Config Messer v2.5.0 (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
