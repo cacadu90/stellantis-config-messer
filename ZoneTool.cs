@@ -2735,7 +2735,7 @@ this.PopulateModules(Data.Modules);
 							for (int i = 0; i < 12; i++)
 							{
 								list.AddRange(sniffer.SniffCollect(1000));
-								outp = outp;
+								// fixed self-assign
 								outp.Text += ".";
 								Application.DoEvents();
 							}
