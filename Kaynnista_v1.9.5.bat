@@ -1,0 +1,5 @@
+@echo off
+cd /d "%~dp0"
+set PS32=%SystemRoot%\SysWOW64\WindowsPowerShell\v1.0\powershell.exe
+if not exist "%PS32%" set PS32=powershell
+"%PS32%" -NoProfile -ExecutionPolicy Bypass -Command "[AppDomain]::CurrentDomain.SetData('PSA_JSON', [IO.File]::ReadAllText('PsaKLineDatabase.json', [Text.Encoding]::UTF8)); $cp = New-Object System.CodeDom.Compiler.CompilerParameters; $cp.GenerateInMemory = $true; $cp.ReferencedAssemblies.AddRange([string[]]@('System.dll','System.Core.dll','System.Windows.Forms.dll','System.Drawing.dll','System.Management.dll','System.Web.Extensions.dll')); $res = (New-Object Microsoft.CSharp.CSharpCodeProvider).CompileAssemblyFromSource($cp, [string[]]@([IO.File]::ReadAllText('Mp7Decoder.cs'),[IO.File]::ReadAllText('PsaKLineHub.cs'),[IO.File]::ReadAllText('ZoneTool.cs'))); $res.CompiledAssembly.GetType('ZoneTool.Program').GetMethod('Main', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, $null)"

@@ -400,7 +400,7 @@ namespace ZoneTool
 		{
 			get
 			{
-				return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "StellantisConfigMesser.ini");
+				return Path.Combine(Environment.CurrentDirectory, "StellantisConfigMesser.ini");
 			}
 		}
 
@@ -437,10 +437,6 @@ namespace ZoneTool
 								{
 									Cfg.Pin = (text3 == "1" || text3.ToLower() == "true");
 								}
-								else if (a == "onlydecoded")
-								{
-									Cfg.OnlyDecoded = (text3 == "1" || text3.ToLower() == "true");
-								}
 							}
 						}
 					}
@@ -464,8 +460,6 @@ namespace ZoneTool
 				stringBuilder.AppendLine("port=" + Cfg.Port);
 				stringBuilder.AppendLine("# pin=1 enables the immobiliser PIN-read button (your own car only)");
 				stringBuilder.AppendLine("pin=" + (Cfg.Pin ? "1" : "0"));
-				stringBuilder.AppendLine("# onlydecoded=1 hides raw-hex-only zones and the raw hex string");
-				stringBuilder.AppendLine("onlydecoded=" + (Cfg.OnlyDecoded ? "1" : "0"));
 				File.WriteAllText(Cfg.Path_, stringBuilder.ToString(), new UTF8Encoding(false));
 			}
 			catch
@@ -484,8 +478,6 @@ namespace ZoneTool
 
 		// Token: 0x04000021 RID: 33
 		public static bool Pin = false;
-
-		public static bool OnlyDecoded = true;
 	}
 	// Token: 0x02000008 RID: 8
 	internal static class Sk
@@ -705,8 +697,20 @@ namespace ZoneTool
 		}
 
 		// Token: 0x0600002C RID: 44 RVA: 0x0000322C File Offset: 0x0000142C
-		public string Send(string cmd, string[] tokens, int maxMs)
+		private System.Collections.Generic.Dictionary<string, string> demoMem = new System.Collections.Generic.Dictionary<string, string>(); public string Send(string cmd, string[] tokens, int maxMs)
 		{
+			
+			
+			
+			
+			
+			 
+			
+			
+			
+			
+			
+			 
 			this.sp.Write(cmd + "\n");
 			Stopwatch stopwatch = Stopwatch.StartNew();
 			StringBuilder stringBuilder = new StringBuilder();
@@ -1003,7 +1007,7 @@ namespace ZoneTool
 		}
 
 		// Token: 0x0600003A RID: 58 RVA: 0x00003B14 File Offset: 0x00001D14
-		public string Send(string cmdHex, string[] tokens, int maxMs)
+		private System.Collections.Generic.Dictionary<string, string> demoMem = new System.Collections.Generic.Dictionary<string, string>(); public string Send(string cmdHex, string[] tokens, int maxMs)
 		{
 			string result;
 			if (this.sp == null)
@@ -1221,7 +1225,10 @@ namespace ZoneTool
 		private static extern int BindProtocol(byte[] desc, int len);
 
 		// Token: 0x06000044 RID: 68
-		[DllImport("C:\\AWRoot\\drv\\VCIAccess.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "_writeAndRead")]
+		[DllImport("C:\\AWRoot\\drv\\VCIAccess.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "_performInit")]
+private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf, int outLen);
+
+[DllImport("C:\\AWRoot\\drv\\VCIAccess.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "_writeAndRead")]
 		private static extern int WriteAndRead(byte[] ecuDesc, int ecuLen, byte[] inBuf, int inLen, byte[] outBuf, int outLen, int timeout);
 
 		// Token: 0x06000045 RID: 69
@@ -1331,7 +1338,8 @@ namespace ZoneTool
 					Directory.SetCurrentDirectory("C:\\");
 					try
 					{
-						VciTransport.CloseSession();
+						this.lastKlineTx = null;
+			VciTransport.CloseSession();
 					}
 					catch
 					{
@@ -1352,9 +1360,7 @@ namespace ZoneTool
 		}
 
 		// Token: 0x0600004C RID: 76 RVA: 0x0000439C File Offset: 0x0000259C
-		public void SelectEcu(string tx, string rx)
-		{
-			int c = VciTransport.ChangeComLine(17);
+		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 }; public string VciKlineInit(int obdPin, byte targetAddr, bool fastInit) { if (!this.connected) { string o = this.Open(""); if (!this.connected) return o; } int c1 = VciTransport.ChangeComLine(obdPin); byte[] proto = fastInit ? PD_KWP2000 : PD_ISO9141; int c2 = VciTransport.BindProtocol(proto, proto.Length); byte[] initIn = new byte[] { targetAddr, (byte)(fastInit ? 1 : 0) }; byte[] initOut = new byte[64]; int c3 = VciTransport.PerformInit(initIn, initIn.Length, initOut, initOut.Length); this.desc = new byte[] { targetAddr, 0xF1 }; string msg = string.Format("VCI Pin {0} | {1} ({2}) | Init 0x{3:X2} -> {4}", obdPin, fastInit ? "KWP2000" : "ISO9141", Status(c2), targetAddr, Status(c3)); if (this.Log != null) this.Log(msg); return msg; } public string VciKlineTxRx(string hexCmd, int timeoutMs) { if (!this.connected || this.desc == null) return "ERR: VCI ei alustettu"; byte[] req = Hex.ToBytes(hexCmd.Replace(" ", "")); byte[] resp = new byte[2048]; int n = VciTransport.WriteAndRead(this.desc, this.desc.Length, req, req.Length, resp, resp.Length, timeoutMs); string outHex = (n > 0) ? BitConverter.ToString(resp, 0, n).Replace("-", " ") : ("[" + Status(n) + "]"); if (this.Log != null) this.Log("K-LINE TX: " + hexCmd + " -> " + outHex); try { string ld = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"); Directory.CreateDirectory(ld); File.AppendAllText(Path.Combine(ld, "VCI_Log_" + DateTime.Now.ToString("yyyyMMdd") + ".txt"), DateTime.Now.ToString("HH:mm:ss.fff") + " | TX: " + hexCmd + " | RX: " + outHex + Environment.NewLine); } catch { } return outHex; } public void SelectEcu(string tx, string rx) { if (tx != null && tx.StartsWith("KLINE:", StringComparison.OrdinalIgnoreCase)) { string[] p = tx.Split(':'); this.VciKlineInit((p.Length > 1) ? Convert.ToInt32(p[1]) : 7, (p.Length > 2) ? Convert.ToByte(p[2], 16) : (byte)0x33, false); return; } int c = VciTransport.ChangeComLine(17);
 			if (this.Log != null)
 			{
 				this.Log("VCI ChangeComLine(17) -> " + VciTransport.Status(c));
@@ -1370,8 +1376,14 @@ namespace ZoneTool
 		}
 
 		// Token: 0x0600004D RID: 77 RVA: 0x00004460 File Offset: 0x00002660
-		public string Send(string cmd, string[] tokens, int maxMs)
+		private System.Collections.Generic.Dictionary<string, string> demoMem = new System.Collections.Generic.Dictionary<string, string>(); public string Send(string cmd, string[] tokens, int maxMs)
 		{
+			
+			
+			
+			
+			
+			 
 			string result;
 			if (this.desc == null)
 			{
@@ -1403,6 +1415,7 @@ namespace ZoneTool
 
 		// Token: 0x0400002A RID: 42
 		private byte[] desc;
+		private string lastKlineTx = null;
 
 		// Token: 0x0400002B RID: 43
 		private static readonly byte[] PD_DIAG_ON_CAN = new byte[]
@@ -1449,11 +1462,18 @@ namespace ZoneTool
 		}
 
 		// Token: 0x06000056 RID: 86 RVA: 0x000045A8 File Offset: 0x000027A8
-		public string Send(string cmd, string[] tokens, int maxMs)
+		private System.Collections.Generic.Dictionary<string, string> demoMem = new System.Collections.Generic.Dictionary<string, string>(); public string Send(string cmd, string[] tokens, int maxMs)
 		{
+			if (cmd == "1081") return "5081";
+			if (cmd == "1800FF00") return "5802013561030061";
+			if (cmd == "14FF00") return "54";
+			if (cmd == "2180") return "618096387654800261209445";
+			if (cmd == "2190") return "6190564633384258465A463830353132333435";
+			if (cmd == "2101") return "610103485A007C1400008812";
+			if (cmd.StartsWith("21") && cmd.Length >= 4) return "61" + cmd.Substring(2, 2) + "1122334455667788";
 			cmd = (cmd ?? "").ToUpper();
 			string result;
-			if (cmd.StartsWith("1003"))
+			if (cmd.StartsWith("10C0")) { result = "50C0"; } else if (cmd.StartsWith("17")) { result = "5700"; } else if (cmd.StartsWith("14")) { result = "54"; } else if (cmd.StartsWith("1081")) { result = "5081"; } else if (cmd.StartsWith("21") && cmd.Length >= 4) { string z = cmd.Substring(2, 2); string k = z; string defHex = (z == "80") ? "9653667580000102030405060708090A".PadRight(160, '0') : ((z == "90") ? "16030000".PadRight(160, '0') : ((z == "A8") ? "3B020000".PadRight(160, '0') : "05010000".PadRight(160, '0'))); result = "61" + z + (this.demoMem.ContainsKey(k) ? this.demoMem[k] : defHex); } else if (cmd.StartsWith("3B") && cmd.Length >= 4) { string z = cmd.Substring(2, 2); string k = z; this.demoMem[k] = cmd.Substring(4); result = "7B" + z; } else if (cmd.StartsWith("1003"))
 			{
 				result = "5003";
 			}
@@ -1477,11 +1497,7 @@ namespace ZoneTool
 			{
 				result = "6E" + cmd.Substring(2, 4);
 			}
-			else if (cmd.StartsWith("21") && cmd.Length >= 4)
-            {
-                result = "61" + cmd.Substring(2, 2) + new string('0', 160);
-            }
-            else if (cmd.StartsWith("22") && cmd.Length >= 6)
+			else if (cmd.StartsWith("22") && cmd.Length >= 6)
 			{
 				result = "62" + cmd.Substring(2, 4) + new string('0', 160);
 			}
@@ -1493,30 +1509,10 @@ namespace ZoneTool
 			{
 				result = "54";
 			}
-			else if (cmd.StartsWith("10C0"))
-				{
-					result = "50C0";
-				}
-				else if (cmd.StartsWith("1081"))
-				{
-					result = "5081";
-				}
-				else if (cmd.StartsWith("17"))
-				{
-					result = "5700";
-				}
-				else if (cmd.StartsWith("21") && cmd.Length >= 4)
-				{
-					result = "61" + cmd.Substring(2, 2) + new string('0', 512);
-				}
-				else if (cmd.StartsWith("3B") && cmd.Length >= 4)
-				{
-					result = "7B" + cmd.Substring(2, 2);
-				}
-				else
-				{
-					result = "";
-				}
+			else
+			{
+				result = "";
+			}
 			return result;
 		}
 
@@ -1972,15 +1968,15 @@ namespace ZoneTool
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer";
+			this.Text = "Stellantis Config Messer v1.9.5 (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
 			this.Font = new Font("Segoe UI", 9f);
 			try
 			{
-				string text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logo.png");
-				string text2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+				string text = Path.Combine(Environment.CurrentDirectory, "logo.png");
+				string text2 = Path.Combine(Environment.CurrentDirectory, "app.ico");
 				if (File.Exists(text))
 				{
 					using (Bitmap bitmap = new Bitmap(text))
@@ -2070,27 +2066,49 @@ namespace ZoneTool
 				Top = 9,
 				Width = 150
 			};
-			this.btnLog.Click += delegate(object s, EventArgs e)
+			TextBox txtSearchFilter = new TextBox {
+                Left = this.btnLog.Right + 12,
+                Top = this.btnLog.Top + 3,
+                Width = 145,
+                BackColor = System.Drawing.Color.FromArgb(18, 24, 34),
+                ForeColor = System.Drawing.Color.Gray,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new System.Drawing.Font("Segoe UI", 9.5f),
+                Text = (System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("fi", StringComparison.OrdinalIgnoreCase) ? "Hae..." : "Search...")
+            };
+            Label lblSearchHint = new Label {
+                Left = txtSearchFilter.Right + 6,
+                Top = this.btnLog.Top + 6,
+                AutoSize = true,
+                ForeColor = System.Drawing.Color.LightGray,
+                Font = new System.Drawing.Font("Segoe UI", 8.5f),
+                Text = "X", Cursor = Cursors.Hand
+            };
+            txtSearchFilter.GotFocus += delegate { if (txtSearchFilter.Text == "Hae..." || txtSearchFilter.Text == "Search...") { txtSearchFilter.Text = ""; txtSearchFilter.ForeColor = System.Drawing.Color.White; } }; txtSearchFilter.LostFocus += delegate { if (string.IsNullOrWhiteSpace(txtSearchFilter.Text)) { txtSearchFilter.Text = (System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("fi", StringComparison.OrdinalIgnoreCase) ? "Hae..." : "Search..."); txtSearchFilter.ForeColor = System.Drawing.Color.Gray; } }; txtSearchFilter.TextChanged += delegate(object s, EventArgs e) {
+                string q = (txtSearchFilter.Text == ((this.lang == "fi") ? "Hae..." : "Search...")) ? "" : txtSearchFilter.Text.Trim().ToLower();
+                this.pnlFields.SuspendLayout();
+                foreach (Control c in this.pnlFields.Controls) {
+                    if (string.IsNullOrEmpty(q)) { c.Visible = true; continue; }
+                    bool match = (c.Text != null && c.Text.ToLower().Contains(q));
+                    if (!match) {
+                        foreach (Control sub in c.Controls) {
+                            if (sub.Text != null && sub.Text.ToLower().Contains(q)) { match = true; break; }
+                        }
+                    }
+                    c.Visible = match;
+                }
+                this.pnlFields.ResumeLayout();
+            };
+            Button btnPsaKLine = new Button { Width = 114, Height = 26, Top = 9, Text = "K-Line + VCI", BackColor = System.Drawing.Color.FromArgb(36, 88, 128), ForeColor = System.Drawing.Color.White, FlatStyle = FlatStyle.Flat, Font = new System.Drawing.Font("Segoe UI", 8.5f, System.Drawing.FontStyle.Bold), Cursor = Cursors.Hand };
+            btnPsaKLine.Click += delegate { new PsaKLineForm(this.lang, this.trans).Show(this); };
+            this.KeyPreview = true;
+            this.KeyDown += delegate(object ks, KeyEventArgs ke) { if (ke.Control && ke.KeyCode == Keys.K) { new PsaKLineForm(this.lang, this.trans).Show(this); ke.Handled = true; } };
+            this.Shown += delegate { if (this.btnLog.Parent != null) { this.btnLog.Parent.Controls.Add(txtSearchFilter); this.btnLog.Parent.Controls.Add(btnPsaKLine); btnPsaKLine.Left = this.flagFi.Left - 122; this.btnLog.Parent.Resize += delegate { btnPsaKLine.Left = this.flagFi.Left - 122; }; } };
+            
+            this.btnLog.Click += delegate(object s, EventArgs e)
 			{
 				this.logPanel.Visible = !this.logPanel.Visible;
 				this.UpdateLogBtn();
-			};
-			this.chkDecoded = new CheckBox
-			{
-				Left = 842,
-				Top = 13,
-				Width = 170,
-				AutoSize = false,
-				Checked = Cfg.OnlyDecoded,
-				ForeColor = Theme.Text,
-				BackColor = Theme.Panel,
-				FlatStyle = FlatStyle.Flat
-			};
-			this.chkDecoded.CheckedChanged += delegate(object s, EventArgs e)
-			{
-				Cfg.OnlyDecoded = this.chkDecoded.Checked;
-				Cfg.Save();
-				this.Render();
 			};
 			this.fiOn = Flags.Fi();
 			this.fiOff = Flags.Dim(this.fiOn);
@@ -2128,7 +2146,6 @@ namespace ZoneTool
 				this.btnConn,
 				this.lblStatus,
 				this.btnLog,
-				this.chkDecoded,
 				this.flagFi,
 				this.flagGb
 			});
@@ -2248,7 +2265,7 @@ namespace ZoneTool
 			};
 			try
 			{
-				string text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logo.png");
+				string text = Path.Combine(Environment.CurrentDirectory, "logo.png");
 				if (File.Exists(text))
 				{
 					this.logo.Image = Image.FromFile(text);
@@ -2271,28 +2288,28 @@ namespace ZoneTool
 			{
 				this.DiagboxRip();
 			};
-			this.menuView = new ToolStripMenuItem();
-			this.menuView.Click += delegate(object s, EventArgs e)
-			{
-				this.ViewBackup();
-			};
-			this.menuExport = new ToolStripMenuItem();
-			this.menuExport.Click += delegate(object s, EventArgs e) { this.ExportConfig(); };
-			this.menuCompare = new ToolStripMenuItem();
-			this.menuCompare.Click += delegate(object s, EventArgs e) { this.CompareBackups(); };
-			this.menuProfiles = new ToolStripMenuItem();
-			ToolStripMenuItem pAcc = new ToolStripMenuItem("ACC + LPA");
-			pAcc.Click += delegate(object s, EventArgs e) { this.ApplyProfile("ACC", "ACC + LPA"); };
-			ToolStripMenuItem pPark = new ToolStripMenuItem("Park Assist");
-			pPark.Click += delegate(object s, EventArgs e) { this.ApplyProfile("PARK", "Park Assist"); };
-			this.menuProfiles.DropDownItems.Add(pAcc);
-			this.menuProfiles.DropDownItems.Add(pPark);
-			this.menuTools.DropDownItems.Add(this.menuView);
-			this.menuTools.DropDownItems.Add(this.menuExport);
-			this.menuTools.DropDownItems.Add(this.menuCompare);
-			this.menuTools.DropDownItems.Add(this.menuProfiles);
 			this.menuTools.DropDownItems.Add(this.menuRestore);
 			this.menuTools.DropDownItems.Add(this.menuRip);
+
+            ToolStripMenuItem menuDiff = new ToolStripMenuItem((this.lang == "fi") ? "Vertaile varmuuskopioita (Diff)..." : "Compare backups (Diff)...");
+            menuDiff.Click += delegate(object s, EventArgs e) { this.CompareBackups(); };
+            this.menuTools.DropDownItems.Add(menuDiff);
+            ToolStripMenuItem menuReport = new ToolStripMenuItem((this.lang == "fi") ? "Tallenna selkokielinen raportti (.txt)..." : "Export readable report (.txt)...");
+            menuReport.Click += delegate(object s, EventArgs e) { this.ExportTextReport(); };
+            this.menuTools.DropDownItems.Add(menuReport);
+            ToolStripMenuItem menuSaveCsv = new ToolStripMenuItem((this.lang == "fi") ? "Tallenna varmuuskopio (.csv)..." : "Save backup snapshot (.csv)...");
+            menuSaveCsv.Click += delegate(object s, EventArgs e) { this.SaveManualBackup(); };
+            this.menuTools.DropDownItems.Add(menuSaveCsv);
+            
+            this.menuTools.DropDownItems.Add(new ToolStripSeparator());
+            ToolStripMenuItem menuTheme = new ToolStripMenuItem((this.lang == "fi") ? "Vaihda teema (Tumma / Vaalea)" : "Switch Theme (Dark / Light)");
+            menuTheme.Click += delegate(object s, EventArgs e) { this.ToggleTheme(); };
+            this.menuTools.DropDownItems.Add(menuTheme);
+            this.menuTools.DropDownItems.Add(new ToolStripSeparator());
+            ToolStripMenuItem menuModOnly = new ToolStripMenuItem((this.lang == "fi") ? "Suodata: Vain muutetut asetukset (Päällä / Käytössä)" : "Filter: Active / Modified items only");
+            menuModOnly.CheckOnClick = true;
+            menuModOnly.Click += delegate(object s, EventArgs e) { this.FilterModifiedOnly(menuModOnly.Checked); };
+            this.menuTools.DropDownItems.Add(menuModOnly);
 			menuStrip.Items.Add(this.menuTools);
 			this.pnlFields = new FlowLayoutPanel
 			{
@@ -2368,13 +2385,6 @@ namespace ZoneTool
 			};
 			this.fieldsHost = fieldsHost;
 			fieldsHost.Controls.Add(this.pnlFields);
-			Panel searchPanel = new Panel { Dock = DockStyle.Top, Height = 30 };
-			this.lblSearch = new Label { Left = 6, Top = 7, Width = 92, Text = "Hae / Search:", ForeColor = Theme.Sub, AutoSize = false };
-			this.txtSearch = new TextBox { Left = 100, Top = 4, Width = 300, BorderStyle = BorderStyle.FixedSingle };
-			this.txtSearch.TextChanged += delegate(object es, EventArgs ee) { this.Render(); };
-			searchPanel.Controls.Add(this.lblSearch);
-			searchPanel.Controls.Add(this.txtSearch);
-			fieldsHost.Controls.Add(searchPanel);
 			base.Controls.Add(fieldsHost);
 			base.Controls.Add(this.logPanel);
 			base.Controls.Add(panel);
@@ -2385,10 +2395,6 @@ namespace ZoneTool
 			Cfg.Load();
 			this.lang = Cfg.Lang;
 			this.btnPin.Visible = Cfg.Pin;
-			if (this.chkDecoded != null)
-			{
-				this.chkDecoded.Checked = Cfg.OnlyDecoded;
-			}
 			int num = this.cbTrans.Items.IndexOf(Cfg.Transport);
 			if (num >= 0)
 			{
@@ -2403,7 +2409,8 @@ namespace ZoneTool
 				this.cbPort.SelectedItem = Cfg.Port;
 			}
 			this.ApplyTheme(menuStrip);
-			this.PopulateModules(Data.Modules);
+			
+this.PopulateModules(Data.Modules);
 			this.SetLang(this.lang);
 			base.FormClosing += delegate(object s, FormClosingEventArgs e)
 			{
@@ -2529,9 +2536,26 @@ namespace ZoneTool
 		}
 
 		// Token: 0x06000075 RID: 117 RVA: 0x0000665C File Offset: 0x0000485C
-		private void SetLang(string l)
+		        private void UpdateCustomTexts(Control.ControlCollection ctrls, string l)
+        {
+            foreach (Control c in ctrls) {
+                if (c is TextBox && (c.Text == "Hae..." || c.Text == "Search...")) c.Text = (l == "fi") ? "Hae..." : "Search...";
+                if (c.HasChildren) this.UpdateCustomTexts(c.Controls, l);
+            }
+            if (this.menuTools != null) {
+                foreach (ToolStripItem ti in this.menuTools.DropDownItems) { if (ti == null || ti.Text == null) continue;
+                    if (ti.Text.Contains("Diff")) ti.Text = (l == "fi") ? "Vertaile varmuuskopioita (Diff)..." : "Compare backups (Diff)...";
+                    else if (ti.Text.Contains(".txt")) ti.Text = (l == "fi") ? "Tallenna selkokielinen raportti (.txt)..." : "Export readable report (.txt)...";
+                    else if (ti.Text.Contains(".csv")) ti.Text = (l == "fi") ? "Tallenna varmuuskopio (.csv)..." : "Save backup snapshot (.csv)...";
+                    else if (ti.Text.Contains("Kumoa") || ti.Text.Contains("Undo")) ti.Text = (l == "fi") ? "Kumoa muutokset (lue uudelleen)" : "Undo changes (re-read)";
+                    else if (ti.Text.Contains("Dark / Light") || ti.Text.Contains("Tumma / Vaalea")) ti.Text = (l == "fi") ? "Vaihda teema (Tumma / Vaalea)" : "Switch Theme (Dark / Light)";
+                    else if (ti.Text.Contains("Suodata:") || ti.Text.Contains("Filter:")) ti.Text = (l == "fi") ? "Suodata: Vain muutetut asetukset (Päällä / Käytössä)" : "Filter: Active / Modified items only";
+                }
+            }
+        }
+        private void SetLang(string l)
 		{
-			this.lang = l;
+			this.lang = l; this.UpdateCustomTexts(this.Controls, l);
 			this.flagFi.Image = ((l == "fi") ? this.fiOn : this.fiOff);
 			this.flagGb.Image = ((l == "en") ? this.gbOn : this.gbOff);
 			this.btnAuto.Text = this.T("auto");
@@ -2554,10 +2578,6 @@ namespace ZoneTool
 			if (this.menuRip != null)
 			{
 				this.menuRip.Text = this.T("ripper");
-				if (this.menuView != null) { this.menuView.Text = (this.lang == "fi") ? "Varmuuskopion tarkastelu" : "View backup"; }
-				if (this.menuProfiles != null) { this.menuProfiles.Text = (this.lang == "fi") ? "Valmiit profiilit (kirjoita kaikki moduulit)" : "Ready profiles (write all modules)"; }
-				if (this.menuExport != null) { this.menuExport.Text = (this.lang == "fi") ? "Vie luettu konfiguraatio (.txt)" : "Export read config (.txt)"; }
-				if (this.menuCompare != null) { this.menuCompare.Text = (this.lang == "fi") ? "Vertaa varmuuskopioita" : "Compare backups"; }
 			}
 			if ((this.trans == null || !this.trans.IsOpen) && !this.busy)
 			{
@@ -2574,10 +2594,6 @@ namespace ZoneTool
 			if (this.btnLog != null && this.logPanel != null)
 			{
 				this.btnLog.Text = (this.logPanel.Visible ? ((this.lang == "fi") ? "Piilota loki" : "Hide log") : ((this.lang == "fi") ? "N\u00e4yt\u00e4 loki" : "Show log"));
-			}
-			if (this.chkDecoded != null)
-			{
-				this.chkDecoded.Text = ((this.lang == "fi") ? "Vain selke\u00e4t" : "Decoded only");
 			}
 		}
 
@@ -2897,7 +2913,7 @@ namespace ZoneTool
 						if (num >= 0)
 						{
 							int num2 = text3.IndexOf(')', num);
-							string text4 = text3.Substring(num + 1, num2 - num - 1);
+							string text4 = (num >= 0 && num2 > num) ? text3.Substring(num + 1, num2 - num - 1) : "";
 							if (text3.IndexOf("Arduino", StringComparison.OrdinalIgnoreCase) >= 0 || text3.IndexOf("CH340", StringComparison.OrdinalIgnoreCase) >= 0 || text3.IndexOf("FTDI", StringComparison.OrdinalIgnoreCase) >= 0 || text3.IndexOf("USB Serial", StringComparison.OrdinalIgnoreCase) >= 0 || text3.IndexOf("USB-SERIAL", StringComparison.OrdinalIgnoreCase) >= 0)
 							{
 								text = text4;
@@ -2952,12 +2968,13 @@ namespace ZoneTool
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer";
+					this.Text = "Stellantis Config Messer v1.9.5 (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
 					this.btnConn.Text = this.T("conn");
-					this.PopulateModules(Data.Modules);
+					
+this.PopulateModules(Data.Modules);
 				}
 				else if (this.Demo())
 				{
@@ -2966,11 +2983,19 @@ namespace ZoneTool
 						Log = new Action<string>(this.L)
 					};
 					this.trans.Open(null);
-					this.lblStatus.Text = this.T("connto") + "Demo";
+					this.lblStatus.Text = this.T("connto") + this.cbTrans.SelectedItem.ToString();
+if (this.cbTrans.SelectedItem.ToString().Contains("K-Line"))
+{
+this.lblStatus.ForeColor = Theme.Amber;
+this.btnConn.Text = this.T("disc");
+this.LoadClassicPeugeotKline();
+return;
+}
 					this.lblStatus.ForeColor = Theme.Amber;
 					this.btnConn.Text = this.T("disc");
 					this.Text = "Stellantis Config Messer  \u2014  DEMO";
-					this.PopulateModules(Data.Modules);
+					
+this.PopulateModules(Data.Modules);
 					this.L((this.lang == "fi") ? "Demo: kaikki 53 ECU:ta ja zonet selattavissa ilman autoa (dummy-data)." : "Demo: all 53 ECUs and zones browsable without a car (dummy data).");
 				}
 				else
@@ -3023,8 +3048,13 @@ namespace ZoneTool
 						this.lblStatus.Text = this.T("connto") + (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem.ToString());
 						this.lblStatus.ForeColor = Theme.Green;
 						this.btnConn.Text = this.T("disc");
-						this.ReadVinToTitle();
-						this.DetectEcus();
+						if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString().Contains("K-Line"))
+{
+this.LoadClassicPeugeotKline();
+return;
+}
+// this.ReadVinToTitle(); ohitettu K-Line-yhteensopivuuden vuoksi
+						// DetectEcus ohitettu K-Line-yhteensopivuuden vuoksi
 					}
 				}
 			}
@@ -3094,6 +3124,7 @@ namespace ZoneTool
 		{
 			this.shown = (mods ?? new List<Module>());
 			this.cbModule.Items.Clear();
+
 			foreach (Module module in this.shown)
 			{
 				this.cbModule.Items.Add(module.Id + " \u2014 " + module.Name);
@@ -3469,12 +3500,39 @@ namespace ZoneTool
 		}
 
 		// Token: 0x06000083 RID: 131 RVA: 0x000084F4 File Offset: 0x000066F4
-		private bool OpenSession()
+		        private void LoadClassicPeugeotKline()
+        {
+            List<Module> kMods = new List<Module>();
+            Module mp7 = new Module { Id = "PEUGEOT_406_MP70", Name = "Peugeot 406 3.0 V6 - Bosch MP 7.0 (K-Line)", Tx = "KL07:10", Rx = "F1", Verified = true };
+            mp7.Zones.Add(new Zone { Id = "80", Name = "ECU Identification (21 80)", Fields = new List<Field> {
+                new Field { En = "Hardware / Software ID", Fi = "Laitteisto- / ohjelmistotunnus", Type = "hex", ByteStart = 0 }
+            }});
+            mp7.Zones.Add(new Zone { Id = "90", Name = "VIN / Chassis Number (21 90)", Fields = new List<Field> {
+                new Field { En = "Vehicle Identification Number", Fi = "Valmistenumero (VIN)", Type = "hex", ByteStart = 0 }
+            }});
+            mp7.Zones.Add(new Zone { Id = "01", Name = "Engine Live Parameters (21 01)", Fields = new List<Field> {
+                new Field { En = "Raw Sensor Block 01", Fi = "Anturilohko 01 (RPM / Temp / VBat)", Type = "hex", ByteStart = 0 }
+            }});
+            kMods.Add(mp7);
+            kMods.Add(new Module { Id = "PEUGEOT_KLINE_INJ", Name = "Peugeot 406/206/306 - MM 48P / Sagem S2000 (K-Line)", Tx = "KL07:10", Rx = "F1", Verified = true, Zones = mp7.Zones });
+            kMods.Add(new Module { Id = "PEUGEOT_KLINE_BVA", Name = "Peugeot 406/607 - Gearbox ZF 4HP20 / AL4 (K-Line)", Tx = "KL07:20", Rx = "F1", Verified = true, Zones = mp7.Zones });
+            kMods.Add(new Module { Id = "PEUGEOT_KLINE_ABS", Name = "Peugeot 406/206 - ABS Bosch 5.3 (K-Line)", Tx = "KL07:01", Rx = "F1", Verified = true, Zones = mp7.Zones });
+            kMods.Add(new Module { Id = "PEUGEOT_KLINE_SRS", Name = "Peugeot 406/206 - Airbag Autoliv (K-Line)", Tx = "KL12:30", Rx = "F1", Verified = true, Zones = mp7.Zones });
+            kMods.Add(new Module { Id = "PEUGEOT_KLINE_BSI", Name = "Peugeot 406/206/Partner - BSI AEE2001 (K-Line)", Tx = "KL07:40", Rx = "F1", Verified = true, Zones = mp7.Zones });
+
+            this.cbModule.Items.Clear();
+
+            foreach (Module m in kMods) this.cbModule.Items.Add(m);
+            if (this.cbModule.Items.Count > 0) this.cbModule.SelectedIndex = 0;
+            this.L((this.lang == "fi") ? "Ladattu Classic Peugeot K-Line (1997-2004) -moduulit (6 kpl)." : "Loaded Classic Peugeot K-Line (1997-2004) modules (6).");
+        }
+
+        private bool OpenSession()
 		{
 			this.trans.SelectEcu(this.curMod.Tx, this.curMod.Rx);
-			string openCmd = ((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "10C0" : "1003"; string text = this.Tx(openCmd, 1200);
+			string openCmd = (this.curMod.Tx != null && this.curMod.Tx.StartsWith("KL")) ? "1081" : ((this.curMod.Id == "BSI2004") ? "10C0" : "1003"); string text = this.Tx(openCmd, 1200);
 			bool result;
-			if (!text.Contains(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "50C0" : "5003"))
+			if (!text.Contains((this.curMod.Tx != null && this.curMod.Tx.StartsWith("KL")) ? "5081" : ((this.curMod.Id == "BSI2004") ? "50C0" : "5003")))
 			{
 				this.L("VIRHE/ERROR 1003 -> " + text);
 				result = false;
@@ -3543,7 +3601,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									list.Add(zoneView);
 								}
 							}
-							this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+							this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -3637,7 +3695,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									}
 								}
 							}
-							this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+							this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -3729,7 +3787,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 		// Token: 0x0600008B RID: 139 RVA: 0x000092A8 File Offset: 0x000074A8
 		private Control BuildControl(ZoneView v, Field f, int left, int width)
 		{
-			int num = Convert.ToInt32(f.Mask, 16);
+			int num = string.IsNullOrWhiteSpace(f.Mask) ? 255 : Convert.ToInt32(f.Mask.Trim(), 16);
 			int num2 = f.ByteStart + this.curMod.ByteOffset;
 			int num3 = (int)v.Bytes[num2] & num;
 			Control control;
@@ -3748,7 +3806,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 						Cursor = Cursors.Hand
 					};
 					ck.FlatAppearance.BorderColor = Theme.Border;
-					int num4 = Convert.ToInt32(f.Options[1].Val, 16) & num;
+					int num4 = (string.IsNullOrWhiteSpace(f.Options[1].Val) ? 0 : Convert.ToInt32(f.Options[1].Val.Trim(), 16)) & num;
 					ck.Checked = (num3 == num4);
 					Field fc = f;
 					Action paint = delegate()
@@ -3780,7 +3838,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 					for (int i = 0; i < f.Options.Count; i++)
 					{
 						comboBox.Items.Add(f.Options[i].L(this.lang));
-						if ((Convert.ToInt32(f.Options[i].Val, 16) & num) == num3)
+						if (((string.IsNullOrWhiteSpace(f.Options[i].Val) ? 0 : Convert.ToInt32(f.Options[i].Val.Trim(), 16)) & num) == num3)
 						{
 							selectedIndex = i;
 						}
@@ -3874,7 +3932,6 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 					toolTip.SetToolTip(label, (text.Length > 1200) ? (text.Substring(0, 1200) + "\u2026") : text);
 					this.pnlFields.Controls.Add(label);
 				}
-				int hidden = 0;
 				using (List<ZoneView>.Enumerator enumerator = this.views.GetEnumerator())
 				{
 					while (enumerator.MoveNext())
@@ -3886,12 +3943,6 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 						List<Field> list = (from f in v.Zone.Fields
 						where f.ByteStart + this.curMod.ByteOffset < v.Bytes.Length
 						select f).ToList<Field>();
-							string q = (this.txtSearch != null) ? this.txtSearch.Text.Trim().ToLower() : "";
-							if (q.Length > 0)
-							{
-								bool zoneMatch = v.Zone.Name.ToLower().Contains(q) || v.Zone.Id.ToLower().Contains(q);
-								if (!zoneMatch) { list = (from f in list where f.L(this.lang).ToLower().Contains(q) select f).ToList<Field>(); if (list.Count == 0) { continue; } }
-							}
 						if (v.Zone.Id == "F190")
 						{
 							Panel panel = this.NewRow();
@@ -3929,7 +3980,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 								ForeColor = Theme.Cyan,
 								BackColor = Theme.Panel,
 								Padding = new Padding(8, 4, 0, 0),
-								Text = (Cfg.OnlyDecoded ? (v.Zone.Id + "   " + v.Zone.Name) : string.Concat(new string[]
+								Text = string.Concat(new string[]
 								{
 									v.Zone.Id,
 									"   ",
@@ -3937,7 +3988,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									"      [",
 									v.OrigHex,
 									"]"
-								})),
+								}),
 								AutoEllipsis = true
 							};
 							this.pnlFields.Controls.Add(value);
@@ -3988,10 +4039,6 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							v.Fs.Add(field);
 							v.Cs.Add(control);
 						}
-						else if (Cfg.OnlyDecoded)
-						{
-							hidden++;
-						}
 						else
 						{
 							Panel panel2 = this.NewRow();
@@ -4020,22 +4067,6 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							v.RawBox = textBox;
 						}
 					}
-				}
-				if (Cfg.OnlyDecoded && hidden > 0)
-				{
-					Label hideNote = new Label
-					{
-						AutoSize = false,
-						Width = 1040,
-						Height = 24,
-						Margin = new Padding(2, 6, 2, 8),
-						ForeColor = Theme.Sub,
-						BackColor = Theme.Panel,
-						Padding = new Padding(8, 4, 0, 0),
-						AutoEllipsis = true,
-						Text = ((this.lang == "fi") ? (hidden + " raakazonea piilotettu \u2013 poista 'Vain selke\u00e4t' n\u00e4hd\u00e4ksesi ne.") : (hidden + " raw-only zones hidden \u2013 uncheck 'Decoded only' to see them."))
-					};
-					this.pnlFields.Controls.Add(hideNote);
 				}
 				this.pnlFields.ResumeLayout();
 			}
@@ -4133,7 +4164,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 		// Token: 0x06000090 RID: 144 RVA: 0x0000A090 File Offset: 0x00008290
 		private string SaveBackupRows(Module mod, List<KeyValuePair<string, string>> rows)
 		{
-			string text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup", this.SafeVin(), mod.Id);
+			string text = Path.Combine(Environment.CurrentDirectory, "backup", this.SafeVin(), mod.Id);
 			Directory.CreateDirectory(text);
 			string text2 = Path.Combine(text, DateTime.Now.ToString("yyyy-MM-dd_HHmmss") + ".csv");
 			StringBuilder stringBuilder = new StringBuilder();
@@ -4246,7 +4277,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									int num = text2.IndexOf("6703");
 									if (num < 0)
 									{
-										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+										this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 										this.L("VIRHE/ERROR: no seed.");
 									}
 									else
@@ -4255,7 +4286,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 										string str2 = Sk.Key(this.curMod.Key, chg);
 										if (!this.Tx("2704" + str2, 800).Contains("6704"))
 										{
-											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											this.L("VIRHE/ERROR: unlock rejected (wrong key?).");
 										}
 										else
@@ -4320,7 +4351,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 													}
 												}
 											}
-											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											this.Render();
 											MessageBox.Show(string.Concat(new object[]
 											{
@@ -4338,7 +4369,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							{
 								try
 								{
-									this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+									this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 								}
 								catch
 								{
@@ -4352,7 +4383,180 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 		}
 
 		// Token: 0x06000093 RID: 147 RVA: 0x0000B620 File Offset: 0x00009820
-		private void RestoreBackup()
+		                                private void FilterModifiedOnly(bool onlyActive)
+        {
+            this.pnlFields.SuspendLayout();
+            foreach (Control c in this.pnlFields.Controls) {
+                if (!onlyActive) { c.Visible = true; continue; }
+                bool isActive = false;
+                foreach (Control sub in c.Controls) {
+                    if (sub.Text != null && (sub.Text.Contains("Päällä") || sub.Text.Contains("On / Active"))) { isActive = true; break; }
+                    foreach (Control sub2 in sub.Controls) {
+                        if (sub2.Text != null && (sub2.Text.Contains("Päällä") || sub2.Text.Contains("On / Active"))) { isActive = true; break; }
+                    }
+                }
+                c.Visible = isActive;
+            }
+            this.pnlFields.ResumeLayout();
+        }
+
+        private bool isLightTheme = false;
+        private void ToggleTheme()
+        {
+            this.isLightTheme = !this.isLightTheme;
+            System.Drawing.Color bgMain = this.isLightTheme ? System.Drawing.Color.FromArgb(242, 245, 249) : System.Drawing.Color.FromArgb(24, 32, 44);
+            System.Drawing.Color bgSub  = this.isLightTheme ? System.Drawing.Color.FromArgb(255, 255, 255) : System.Drawing.Color.FromArgb(30, 41, 56);
+            System.Drawing.Color fgMain = this.isLightTheme ? System.Drawing.Color.FromArgb(20, 25, 35) : System.Drawing.Color.White;
+
+            this.BackColor = bgMain;
+            this.ForeColor = fgMain;
+            this.pnlFields.BackColor = bgMain;
+            this.ApplyThemeRec(this.Controls, bgMain, bgSub, fgMain);
+        }
+
+        private void ApplyThemeRec(Control.ControlCollection ctrls, System.Drawing.Color bgMain, System.Drawing.Color bgSub, System.Drawing.Color fgMain)
+        {
+            System.Drawing.Color bgBox = this.isLightTheme ? System.Drawing.Color.FromArgb(248, 250, 252) : System.Drawing.Color.FromArgb(18, 24, 34);
+            foreach (Control c in ctrls) {
+                if (c is Button) continue;
+                if (c is Panel || c.GetType().Name.Contains("Panel")) c.BackColor = bgSub;
+                else if (c is TextBoxBase || c is ComboBox) {
+                    c.BackColor = bgBox;
+                    if (c.ForeColor != System.Drawing.Color.Gray) c.ForeColor = fgMain;
+                }
+                else if (c is Label && !(c.Parent == this.pnlFields && this.pnlFields.Controls.Count < 15)) {
+                    if (this.isLightTheme) {
+                        if (c.ForeColor.R > 120 && c.ForeColor.G > 120 && c.ForeColor.B > 120 && c.ForeColor != System.Drawing.Color.FromArgb(56, 189, 248)) c.ForeColor = fgMain;
+                    } else {
+                        if (c.ForeColor == System.Drawing.Color.FromArgb(20, 25, 35)) c.ForeColor = fgMain;
+                    }
+                }
+                if (c.HasChildren) this.ApplyThemeRec(c.Controls, bgMain, bgSub, fgMain);
+            }
+        }
+
+                private void SaveManualBackup()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Zone;Hex");
+            int count = 0;
+            foreach (Control c in this.pnlFields.Controls) {
+                if (c is Label && c.Text != null && c.Text.Contains("[") && c.Text.Contains("]")) {
+                    string t = c.Text.Trim();
+                    string z = t.Split(' ')[0].Trim();
+                    int i1 = t.IndexOf('[');
+                    int i2 = t.IndexOf(']');
+                    if (i2 > i1) {
+                        sb.AppendLine(z + ";" + t.Substring(i1 + 1, i2 - i1 - 1));
+                        count++;
+                    }
+                }
+            }
+            if (count == 0) {
+                MessageBox.Show((this.lang == "fi") ? "Lue ensin moduulin asetukset (paina Lue)." : "Read module settings first (click Read).", "Stellantis Config Messer");
+                return;
+            }
+            string bDir = Path.Combine(Environment.CurrentDirectory, "backup");
+            if (!Directory.Exists(bDir)) Directory.CreateDirectory(bDir);
+            string modId = (this.curMod != null) ? this.curMod.Id : "ECU";
+            string fn = Path.Combine(bDir, modId + "_snapshot_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv");
+            File.WriteAllText(fn, sb.ToString(), System.Text.Encoding.UTF8);
+            MessageBox.Show(((this.lang == "fi") ? "Varmuuskopio tallennettu:\n" : "Backup saved:\n") + fn, "Stellantis Config Messer");
+        }
+
+        private void ExportTextReport()
+        {
+            bool hasZone = false; foreach (Control c in this.pnlFields.Controls) { if (c is Panel) { hasZone = true; break; } } if (!hasZone) {
+                MessageBox.Show((this.lang == "fi") ? "Lue ensin moduulin asetukset (paina Lue)." : "Read module settings first (click Read).", "Stellantis Config Messer");
+                return;
+            }
+            string bDir = Path.Combine(Environment.CurrentDirectory, "backup"); if (!Directory.Exists(bDir)) Directory.CreateDirectory(bDir); SaveFileDialog sfd = new SaveFileDialog { InitialDirectory = bDir,
+                Filter = "Text Report (*.txt)|*.txt",
+                FileName = ((this.curMod != null) ? this.curMod.Id : "ECU") + "_raportti_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".txt"
+            };
+            if (sfd.ShowDialog() != DialogResult.OK) return;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Stellantis Config Messer - Konfiguraatioraportti");
+            sb.AppendLine("Aika: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            if (this.curMod != null) sb.AppendLine("Moduuli: " + this.curMod.Id + " - " + this.curMod.Name);
+            sb.AppendLine(new string('=', 60));
+
+            foreach (Control c in this.pnlFields.Controls) {
+                if (c is Label) {
+                    sb.AppendLine();
+                    sb.AppendLine("### " + c.Text);
+                } else if (c is Panel) {
+                    string lbl = "";
+                    string val = "";
+                    foreach (Control sub in c.Controls) {
+                        if (sub is Label) lbl = sub.Text;
+                        else if (!string.IsNullOrEmpty(sub.Text) && sub != c.Controls[0]) val = sub.Text;
+                        else { foreach (Control sub2 in sub.Controls) { if (!string.IsNullOrEmpty(sub2.Text)) val = sub2.Text; } }
+                    }
+                    if (!string.IsNullOrEmpty(lbl)) sb.AppendLine(string.Format("  {0,-48} : {1}", lbl, val));
+                }
+            }
+            File.WriteAllText(sfd.FileName, sb.ToString(), System.Text.Encoding.UTF8);
+            MessageBox.Show((this.lang == "fi") ? "Raportti tallennettu!" : "Report saved!", "Stellantis Config Messer");
+        }
+
+        private void CompareBackups()
+        {
+            string bDir = Path.Combine(Environment.CurrentDirectory, "backup");
+            if (!Directory.Exists(bDir)) Directory.CreateDirectory(bDir);
+            OpenFileDialog ofd1 = new OpenFileDialog { InitialDirectory = bDir, Filter = "CSV Backup (*.csv)|*.csv|All files (*.*)|*.*", Title = (this.lang == "fi") ? "Valitse 1. (alkuperainen) varmuuskopio" : "Select 1st (original) backup" };
+            if (ofd1.ShowDialog() != DialogResult.OK) return;
+            OpenFileDialog ofd2 = new OpenFileDialog { InitialDirectory = bDir, Filter = "CSV Backup (*.csv)|*.csv|All files (*.*)|*.*", Title = (this.lang == "fi") ? "Valitse 2. (muutettu) varmuuskopio" : "Select 2nd (modified) backup" };
+            if (ofd2.ShowDialog() != DialogResult.OK) return;
+
+            var d1 = new System.Collections.Generic.Dictionary<string, string>();
+            foreach (string line in File.ReadAllLines(ofd1.FileName)) {
+                string[] parts = line.Split(';');
+                if (parts.Length >= 2 && parts[0] != "Zone") d1[parts[0].Trim()] = parts[1].Trim().ToUpper();
+            }
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Vertailu / Diff:");
+            sb.AppendLine("A: " + Path.GetFileName(ofd1.FileName));
+            sb.AppendLine("B: " + Path.GetFileName(ofd2.FileName));
+            sb.AppendLine(new string('-', 55));
+
+            int diffs = 0;
+            foreach (string line in File.ReadAllLines(ofd2.FileName)) {
+                string[] parts = line.Split(';');
+                if (parts.Length < 2 || parts[0] == "Zone") continue;
+                string z = parts[0].Trim();
+                string v2 = parts[1].Trim().ToUpper();
+                if (!d1.ContainsKey(z)) continue;
+                string v1 = d1[z];
+                if (v1 == v2) continue;
+
+                int minLen = Math.Min(v1.Length, v2.Length) / 2;
+                for (int i = 0; i < minLen; i++) {
+                    byte b1 = Convert.ToByte(v1.Substring(i * 2, 2), 16);
+                    byte b2 = Convert.ToByte(v2.Substring(i * 2, 2), 16);
+                    if (b1 != b2) {
+                        diffs++;
+                        sb.AppendLine(string.Format("Zone {0} | Tavu {1}: {2:X2} -> {3:X2}", z, i, b1, b2));
+                        for (int bit = 0; bit < 8; bit++) {
+                            int bit1 = (b1 >> bit) & 1;
+                            int bit2 = (b2 >> bit) & 1;
+                            if (bit1 != bit2) {
+                                sb.AppendLine(string.Format("   -> Bitti {0} (maski {1:X2}): {2} -> {3}", bit, (1 << bit), bit1, bit2));
+                            }
+                        }
+                    }
+                }
+            }
+            if (diffs == 0) sb.AppendLine("Ei eroja tiedostojen valilla / No differences found.");
+
+            Form f = new Form { Text = "Backup Diff", Width = 620, Height = 460, StartPosition = FormStartPosition.CenterParent, BackColor = System.Drawing.Color.FromArgb(24, 32, 44) };
+            TextBox tb = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new System.Drawing.Font("Consolas", 10f), BackColor = System.Drawing.Color.FromArgb(18, 24, 34), ForeColor = System.Drawing.Color.Gray, Text = sb.ToString() };
+            f.Controls.Add(tb);
+            f.ShowDialog(this);
+        }
+
+        private void RestoreBackup()
 		{
 			if (!this.busy)
 			{
@@ -4365,7 +4569,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 					string fileName;
 					using (OpenFileDialog openFileDialog = new OpenFileDialog())
 					{
-						string text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+						string text = Path.Combine(Environment.CurrentDirectory, "backup");
 						if (Directory.Exists(text))
 						{
 							openFileDialog.InitialDirectory = text;
@@ -4425,7 +4629,8 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							int num = this.shown.IndexOf(mod);
 							if (num < 0)
 							{
-								this.PopulateModules(Data.Modules);
+								
+this.PopulateModules(Data.Modules);
 								num = this.shown.IndexOf(mod);
 							}
 							if (num >= 0)
@@ -4483,7 +4688,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 										}
 										if (list2.Count == 0)
 										{
-											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											this.BeginInvoke(new Action(delegate()
 											{
 												MessageBox.Show((this.lang == "fi") ? "Kaikki zonet jo backupin mukaiset." : "All zones already match the backup.");
@@ -4538,7 +4743,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 											}));
 											if (!proceed)
 											{
-												this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+												this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 											}
 											else
 											{
@@ -4546,7 +4751,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 												int num4 = text6.IndexOf("6703");
 												if (num4 < 0)
 												{
-													this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+													this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 													this.L("VIRHE/ERROR: no seed.");
 												}
 												else
@@ -4555,7 +4760,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 													string str2 = Sk.Key(mod.Key, chg);
 													if (!this.Tx("2704" + str2, 800).Contains("6704"))
 													{
-														this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+														this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 														this.L("VIRHE/ERROR: unlock rejected (wrong/unknown key?).");
 													}
 													else
@@ -4587,7 +4792,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 																}
 															}
 														}
-														this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+														this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 													}
 												}
 											}
@@ -4598,7 +4803,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 								{
 									try
 									{
-										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+										this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 									}
 									catch
 									{
@@ -4701,7 +4906,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 						}));
 					}
 					stringBuilder.Append("}}");
-					string path3 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "diagbox_overlay.json");
+					string path3 = Path.Combine(Environment.CurrentDirectory, "diagbox_overlay.json");
 					File.WriteAllText(path3, stringBuilder.ToString(), new UTF8Encoding(false));
 					Data.LoadOverlay(path3);
 					this.L(string.Concat(new object[]
@@ -4772,7 +4977,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 		{
 			List<string> list = new List<string>();
 			r = (r ?? "").Replace(" ", "");
-			int kwpIdx = r.IndexOf("57");
+			int kwpIdx = r.IndexOf("57"); if (kwpIdx < 0) kwpIdx = r.IndexOf("58");
 if (r.IndexOf("5902") < 0 && kwpIdx >= 0 && r.Length >= kwpIdx + 4)
 {
 int count = 0;
@@ -4849,314 +5054,6 @@ int num = r.IndexOf("5902");
 		}
 
 		// Token: 0x06000098 RID: 152 RVA: 0x0000C178 File Offset: 0x0000A378
-		private void ViewBackup()
-{
-    string fileName;
-    using (OpenFileDialog ofd = new OpenFileDialog())
-    {
-        string bdir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
-        if (Directory.Exists(bdir)) { ofd.InitialDirectory = bdir; }
-        ofd.Filter = "Backup CSV|*.csv|All files|*.*";
-        if (ofd.ShowDialog(this) != DialogResult.OK) { return; }
-        fileName = ofd.FileName;
-    }
-    string ecuId = null; string vin = ""; string ts = "";
-    List<KeyValuePair<string, string>> rows = new List<KeyValuePair<string, string>>();
-    try
-    {
-        foreach (string ln in File.ReadAllLines(fileName))
-        {
-            string t = ln.Trim();
-            if (t.Length == 0) { continue; }
-            string[] a = t.Split(new char[] { ';' });
-            if (a.Length >= 2 && (a[0].Equals("ECU", StringComparison.OrdinalIgnoreCase) || a[0].Equals("Module", StringComparison.OrdinalIgnoreCase))) { ecuId = a[1].Split(new char[] { ' ' })[0].Trim(); }
-            else if (a.Length >= 2 && a[0].Equals("VIN", StringComparison.OrdinalIgnoreCase)) { vin = a[1].Trim(); }
-            else if (a.Length >= 2 && a[0].Equals("Timestamp", StringComparison.OrdinalIgnoreCase)) { ts = a[1].Trim(); }
-            else if (a.Length == 2 && Regex.IsMatch(a[0].Trim(), "^[0-9A-Fa-f]{2,4}$") && Regex.IsMatch(a[1].Trim(), "^[0-9A-Fa-f]+$")) { rows.Add(new KeyValuePair<string, string>(a[0].Trim().ToUpper(), a[1].Trim().ToUpper())); }
-        }
-    }
-    catch (Exception ex) { MessageBox.Show("CSV: " + ex.Message); return; }
-    if (ecuId == null || rows.Count == 0) { MessageBox.Show((this.lang == "fi") ? "Backup-tiedostoa ei tunnistettu." : "Not a recognised backup file."); return; }
-    Module mod = Data.Modules.FirstOrDefault((Module m) => m.Id.Equals(ecuId, StringComparison.OrdinalIgnoreCase));
-    bool fi = this.lang == "fi";
-    int off = (mod != null) ? mod.ByteOffset : 0;
-    List<string> lines = new List<string>();
-    lines.Add("ECU: " + ecuId + ((mod != null) ? ("  (" + mod.Name + ")") : (fi ? "  (tuntematon)" : "  (unknown)")));
-    if (vin != "") { lines.Add("VIN: " + vin); }
-    if (ts != "") { lines.Add((fi ? "Aika: " : "Time: ") + ts); }
-    lines.Add("");
-    foreach (KeyValuePair<string, string> row in rows)
-    {
-        string zid = row.Key;
-        byte[] bytes = Hex.ToBytes(row.Value);
-        Zone zone = (mod != null) ? mod.Zones.FirstOrDefault((Zone z) => z.Id.Equals(zid, StringComparison.OrdinalIgnoreCase)) : null;
-        List<Field> flds = new List<Field>();
-        if (zone != null) { foreach (Field f in zone.Fields) { if (f.ByteStart + off < bytes.Length) { flds.Add(f); } } }
-        if (flds.Count > 0)
-        {
-            lines.Add(zid + "  " + zone.Name);
-            foreach (Field f in flds)
-            {
-                int mask = Convert.ToInt32(f.Mask, 16);
-                int val = (int)bytes[f.ByteStart + off] & mask;
-                string disp = "0x" + val.ToString("X2");
-                foreach (Opt o in f.Options) { if ((Convert.ToInt32(o.Val, 16) & mask) == val) { disp = o.L(this.lang); break; } }
-                lines.Add("    " + f.L(this.lang) + ": " + disp);
-            }
-        }
-        else { lines.Add(zid + ((zone != null) ? ("  " + zone.Name) : (fi ? "  (tuntematon zone)" : "  (unknown zone)")) + "   [raw " + row.Value + "]"); }
-    }
-    Form form = new Form { Text = (fi ? "Varmuuskopion tarkastelu - " : "Backup viewer - ") + Path.GetFileName(fileName), Width = 740, Height = 580, StartPosition = FormStartPosition.CenterParent, Font = this.Font, BackColor = Theme.Bg, ForeColor = Theme.Text };
-    ListBox lb = new ListBox { Dock = DockStyle.Fill, Font = Theme.Mono(9.5f), BackColor = Theme.Panel, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, HorizontalScrollbar = true };
-    foreach (string s in lines) { lb.Items.Add(s); }
-    Panel bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Theme.Bg };
-    Button save = new Button { Left = 8, Top = 9, Width = 220, Height = 28, Text = (fi ? "Tallenna .txt" : "Save .txt") };
-    Theme.Btn(save, Theme.Card, Theme.Text);
-    save.Click += delegate(object s2, EventArgs e2)
-    {
-        using (SaveFileDialog sfd = new SaveFileDialog())
-        {
-            sfd.Filter = "Text|*.txt";
-            sfd.FileName = ecuId + "_" + ((vin != "") ? vin : "config") + ".txt";
-            if (sfd.ShowDialog(form) == DialogResult.OK) { try { File.WriteAllText(sfd.FileName, string.Join("\r\n", lines.ToArray()), new UTF8Encoding(false)); } catch (Exception ex2) { MessageBox.Show(ex2.Message); } }
-        }
-    };
-    bar.Controls.Add(save);
-    form.Controls.Add(lb);
-    form.Controls.Add(bar);
-    form.ShowDialog(this);
-}
-		private class ProfOp { public string Zone; public string Set; public int At = -1; public string Val; }
-		private class ProfMod { public string Name; public string Tx; public string Rx; public string Key; public string Trace; public List<ProfOp> Ops = new List<ProfOp>(); }
-
-		private List<ProfMod> Profile(string name)
-		{
-			List<ProfMod> l = new List<ProfMod>();
-			if (name == "ACC")
-			{
-				l.Add(new ProfMod { Name = "BSI", Tx = "752", Rx = "652", Key = "B4E0", Trace = "yes", Ops = { new ProfOp { Zone = "2348", At = 0, Val = "05" } } });
-				l.Add(new ProfMod { Name = "ARTIV radar", Tx = "6B6", Rx = "696", Key = "EFCA", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 1, Val = "F7" } } });
-				l.Add(new ProfMod { Name = "CVM camera", Tx = "74A", Rx = "64A", Key = "E2E5", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 2, Val = "8D" } } });
-				l.Add(new ProfMod { Name = "VCU", Tx = "6A2", Rx = "682", Key = "0107", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 3, Val = "6F" } } });
-				l.Add(new ProfMod { Name = "ESP", Tx = "6AD", Rx = "68D", Key = "BC93", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 33, Val = "EF" } } });
-			}
-			else if (name == "PARK")
-			{
-				l.Add(new ProfMod { Name = "BSI", Tx = "752", Rx = "652", Key = "B4E0", Trace = "yes", Ops = { new ProfOp { Zone = "2300", At = 0, Val = "37" }, new ProfOp { Zone = "2470", At = 0, Val = "01" } } });
-				l.Add(new ProfMod { Name = "AAS park assist", Tx = "75D", Rx = "65D", Key = "B6F0", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 0, Val = "13" } } });
-				l.Add(new ProfMod { Name = "ESP", Tx = "6AD", Rx = "68D", Key = "BC93", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 34, Val = "9F" } } });
-				l.Add(new ProfMod { Name = "DAE steering", Tx = "6B5", Rx = "695", Key = "2105", Trace = "try", Ops = { new ProfOp { Zone = "2101", At = 1, Val = "CE" } } });
-				l.Add(new ProfMod { Name = "RCC infotainment", Tx = "764", Rx = "664", Key = "F107", Trace = "try", Ops = { new ProfOp { Zone = "210C", Set = "A010" }, new ProfOp { Zone = "2133", Set = "0E0100000E04" } } });
-			}
-			return l;
-		}
-
-		private string ReadZoneRaw(ITransport tr, string zone)
-		{
-			bool kwp = (zone.Length == 2); string r = tr.Send((kwp ? "21" : "22") + zone, new string[] { (kwp ? "61" : "62") + zone, kwp ? "7F21" : "7F22" }, 900);
-			int i = r.IndexOf((kwp ? "61" : "62") + zone);
-			if (i < 0) { return null; }
-			return r.Substring(i + 2 + zone.Length);
-		}
-
-		private void ApplyProfile(string name, string label)
-		{
-			if (this.busy) { return; }
-			if (this.trans == null || !this.trans.IsOpen) { MessageBox.Show((this.lang == "fi") ? "Ei yhteytt\u00e4." : "Not connected."); return; }
-			bool fi = this.lang == "fi";
-			List<ProfMod> prof = this.Profile(name);
-			StringBuilder sb = new StringBuilder();
-			sb.AppendLine((fi ? "Profiili: " : "Profile: ") + label);
-			sb.AppendLine(fi ? "Kirjoitetaan N\u00c4IHIN moduuleihin kerralla:" : "Writes to ALL these modules at once:");
-			sb.AppendLine("");
-			foreach (ProfMod m in prof)
-			{
-				sb.AppendLine(m.Name + "  (" + m.Tx + ":" + m.Rx + ")");
-				foreach (ProfOp op in m.Ops)
-				{
-					sb.AppendLine("    " + op.Zone + ((op.Set != null) ? (" = " + op.Set) : ("  byte" + op.At + " = " + op.Val)));
-				}
-			}
-			sb.AppendLine("");
-			sb.AppendLine(fi ? "Varmuuskopio otetaan ennen jokaista kirjoitusta. Varmista ett\u00e4 kyseess\u00e4 on OIKEA auto (e-2008). Jatketaanko?" : "A backup is taken before each write. Make sure this is the RIGHT car (e-2008). Continue?");
-			if (MessageBox.Show(sb.ToString(), (fi ? "Kirjoita profiili" : "Write profile"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { return; }
-			this.busy = true;
-			this.SetButtons(false);
-			ITransport tr = this.trans;
-			new Thread(delegate()
-			{
-				int okMods = 0; int okWrites = 0; int total = 0;
-				foreach (ProfMod m in prof)
-				{
-					try
-					{
-						tr.SelectEcu(m.Tx, m.Rx);
-						try
-						{
-							List<KeyValuePair<string, string>> brows = new List<KeyValuePair<string, string>>();
-							foreach (ProfOp op in m.Ops) { string cur0 = this.ReadZoneRaw(tr, op.Zone); if (cur0 != null) { brows.Add(new KeyValuePair<string, string>(op.Zone, cur0)); } }
-							if (brows.Count > 0) { Module bm = new Module { Id = m.Name.Replace(" ", "_"), Name = m.Name, Tx = m.Tx, Rx = m.Rx, Key = m.Key, Trace = m.Trace, ByteOffset = 0 }; string bp = this.SaveBackupRows(bm, brows); this.L(((fi) ? "Varmuuskopio: " : "Backup: ") + bp); }
-						}
-						catch (Exception be) { this.L("WARN backup " + m.Name + ": " + be.Message); }
-						if (!tr.Send("1003", null, 1200).Contains("5003")) { this.L("VIRHE/ERROR 1003 (" + m.Name + ") - ohitettu."); continue; }
-						string sr = tr.Send("2703", null, 900); int si = sr.IndexOf("6703");
-						if (si < 0) { tr.Send("1001", null, 300); this.L("VIRHE/ERROR: no seed (" + m.Name + ")."); continue; }
-						string keyAns = Sk.Key(m.Key, Hex.ToBytes(sr.Substring(si + 4, 8)));
-						if (!tr.Send("2704" + keyAns, null, 900).Contains("6704")) { tr.Send("1001", null, 300); this.L("VIRHE/ERROR: unlock rejected (" + m.Name + ") - ohitettu."); continue; }
-						foreach (ProfOp op in m.Ops)
-						{
-							total++;
-							string cur = this.ReadZoneRaw(tr, op.Zone);
-							if (cur == null) { this.L("VIRHE " + m.Name + " " + op.Zone + ": luku ep\u00e4onnistui."); continue; }
-							string newHex;
-							if (op.Set != null) { newHex = op.Set.ToUpper(); }
-							else { byte[] b = Hex.ToBytes(cur); if (op.At < b.Length) { b[op.At] = Convert.ToByte(op.Val, 16); } else { this.L("VIRHE " + m.Name + " " + op.Zone + ": byte" + op.At + " ei mahdu."); continue; } newHex = Hex.ToStr(b, b.Length); }
-							if (newHex.Equals(cur, StringComparison.OrdinalIgnoreCase)) { this.L("OK " + m.Name + " " + op.Zone + ": jo asetettu."); okWrites++; continue; }
-							string w = tr.Send("2E" + op.Zone + newHex, null, 2000);
-							if (!w.Contains("6E" + op.Zone)) { this.L("VIRHE " + m.Name + " " + op.Zone + ": kirjoitus hyl\u00e4tty (" + w + ")."); continue; }
-							string re = this.ReadZoneRaw(tr, op.Zone);
-							if (re != null && re.StartsWith(newHex, StringComparison.OrdinalIgnoreCase)) { okWrites++; this.L("OK " + m.Name + " " + op.Zone + " -> " + newHex); } else { this.L("TARKISTA " + m.Name + " " + op.Zone + ": " + re); }
-							if (m.Trace == "yes" || m.Trace == "try") { string ts = tr.Send("2E2901FD000000010101", null, 2000); if (ts.Contains("6E2901")) { this.L("2901 " + m.Name + " OK."); } else if (m.Trace == "yes") { this.L("WARN 2901 " + m.Name + " (" + ts + ")."); } }
-						}
-						tr.Send("1001", null, 300);
-						okMods++;
-					}
-					catch (Exception ex)
-					{
-						try { tr.Send("1001", null, 300); } catch { }
-						this.L("VIRHE/ERROR " + m.Name + ": " + ex.Message);
-					}
-				}
-				int fm = okMods; int fw = okWrites; int ft = total;
-				this.BeginInvoke(new Action(delegate()
-				{
-					this.busy = false;
-					this.SetButtons(true);
-					MessageBox.Show((fi ? ("Profiili kirjoitettu.\nModuuleja: " + fm + "/" + prof.Count + "\nZoneja: " + fw + "/" + ft + "\n\nTee virtasykli (sytytys pois ~30 s) ja aja Tyhjenn\u00e4 DTC jokaiselle moduulille.") : ("Profile written.\nModules: " + fm + "/" + prof.Count + "\nZones: " + fw + "/" + ft + "\n\nDo a power cycle and clear DTCs on each module.")), (fi ? "Valmis" : "Done"));
-				}));
-			})
-			{ IsBackground = true }.Start();
-		}
-		private Dictionary<string, string> ParseBackup(string file, out string ecuId)
-		{
-			ecuId = null;
-			Dictionary<string, string> d = new Dictionary<string, string>();
-			foreach (string ln in File.ReadAllLines(file))
-			{
-				string t = ln.Trim();
-				if (t.Length == 0) { continue; }
-				string[] a = t.Split(new char[] { ';' });
-				if (a.Length >= 2 && (a[0].Equals("ECU", StringComparison.OrdinalIgnoreCase) || a[0].Equals("Module", StringComparison.OrdinalIgnoreCase))) { ecuId = a[1].Split(new char[] { ' ' })[0].Trim(); }
-				else if (a.Length == 2 && Regex.IsMatch(a[0].Trim(), "^[0-9A-Fa-f]{2,4}$") && Regex.IsMatch(a[1].Trim(), "^[0-9A-Fa-f]+$")) { d[a[0].Trim().ToUpper()] = a[1].Trim().ToUpper(); }
-			}
-			return d;
-		}
-
-		private string DecodeField(Module mod, Field f, byte[] bytes)
-		{
-			int off = (mod != null) ? mod.ByteOffset : 0;
-			if (f.ByteStart + off >= bytes.Length) { return null; }
-			int mask = Convert.ToInt32(f.Mask, 16);
-			int val = (int)bytes[f.ByteStart + off] & mask;
-			foreach (Opt o in f.Options) { if ((Convert.ToInt32(o.Val, 16) & mask) == val) { return o.L(this.lang); } }
-			return "0x" + val.ToString("X2");
-		}
-
-		private void ShowReport(string title, List<string> lines, string saveName)
-		{
-			bool fi = this.lang == "fi";
-			Form form = new Form { Text = title, Width = 760, Height = 600, StartPosition = FormStartPosition.CenterParent, Font = this.Font, BackColor = Theme.Bg, ForeColor = Theme.Text };
-			ListBox lb = new ListBox { Dock = DockStyle.Fill, Font = Theme.Mono(9.5f), BackColor = Theme.Panel, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, HorizontalScrollbar = true };
-			foreach (string s in lines) { lb.Items.Add(s); }
-			Panel bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Theme.Bg };
-			Button save = new Button { Left = 8, Top = 9, Width = 220, Height = 28, Text = (fi ? "Tallenna .txt" : "Save .txt") };
-			Theme.Btn(save, Theme.Card, Theme.Text);
-			save.Click += delegate(object s2, EventArgs e2)
-			{
-				using (SaveFileDialog sfd = new SaveFileDialog())
-				{
-					sfd.Filter = "Text|*.txt"; sfd.FileName = saveName;
-					if (sfd.ShowDialog(form) == DialogResult.OK) { try { File.WriteAllText(sfd.FileName, string.Join("\r\n", lines.ToArray()), new UTF8Encoding(false)); } catch (Exception ex) { MessageBox.Show(ex.Message); } }
-				}
-			};
-			bar.Controls.Add(save); form.Controls.Add(lb); form.Controls.Add(bar); form.ShowDialog(this);
-		}
-
-		private void ExportConfig()
-		{
-			bool fi = this.lang == "fi";
-			if (this.views == null || this.views.Count == 0) { MessageBox.Show(fi ? "Lue ensin." : "Read first."); return; }
-			int off = (this.curMod != null) ? this.curMod.ByteOffset : 0;
-			List<string> lines = new List<string>();
-			lines.Add("ECU: " + ((this.curMod != null) ? (this.curMod.Id + "  (" + this.curMod.Name + ")") : ""));
-			if (!string.IsNullOrEmpty(this.vin)) { lines.Add("VIN: " + this.vin); }
-			lines.Add((fi ? "Aika: " : "Time: ") + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-			lines.Add("");
-			foreach (ZoneView v in this.views)
-			{
-				List<Field> flds = new List<Field>();
-				foreach (Field f in v.Zone.Fields) { if (f.ByteStart + off < v.Bytes.Length) { flds.Add(f); } }
-				if (flds.Count > 0)
-				{
-					lines.Add(v.Zone.Id + "  " + v.Zone.Name);
-					foreach (Field f in flds) { lines.Add("    " + f.L(this.lang) + ": " + this.DecodeField(this.curMod, f, v.Bytes)); }
-				}
-				else { lines.Add(v.Zone.Id + "  " + v.Zone.Name + "   [raw " + v.OrigHex + "]"); }
-			}
-			this.ShowReport((fi ? "Luettu konfiguraatio" : "Read configuration"), lines, ((this.curMod != null) ? this.curMod.Id : "config") + "_" + (string.IsNullOrEmpty(this.vin) ? "config" : this.vin) + ".txt");
-		}
-
-		private void CompareBackups()
-		{
-			bool fi = this.lang == "fi";
-			string fa; string fb;
-			using (OpenFileDialog o1 = new OpenFileDialog())
-			{
-				string bdir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup"); if (Directory.Exists(bdir)) { o1.InitialDirectory = bdir; }
-				o1.Title = fi ? "Valitse 1. varmuuskopio (vanha)" : "Select 1st backup (old)"; o1.Filter = "Backup CSV|*.csv|All files|*.*";
-				if (o1.ShowDialog(this) != DialogResult.OK) { return; }
-				fa = o1.FileName;
-			}
-			using (OpenFileDialog o2 = new OpenFileDialog())
-			{
-				o2.InitialDirectory = Path.GetDirectoryName(fa); o2.Title = fi ? "Valitse 2. varmuuskopio (uusi)" : "Select 2nd backup (new)"; o2.Filter = "Backup CSV|*.csv|All files|*.*";
-				if (o2.ShowDialog(this) != DialogResult.OK) { return; }
-				fb = o2.FileName;
-			}
-			string ia; string ib;
-			Dictionary<string, string> da; Dictionary<string, string> db;
-			try { da = this.ParseBackup(fa, out ia); db = this.ParseBackup(fb, out ib); }
-			catch (Exception ex) { MessageBox.Show("CSV: " + ex.Message); return; }
-			Module mod = Data.Modules.FirstOrDefault((Module m) => m.Id.Equals(ia, StringComparison.OrdinalIgnoreCase));
-			List<string> lines = new List<string>();
-			lines.Add((fi ? "Vertailu" : "Compare") + ": " + Path.GetFileName(fa) + "  ->  " + Path.GetFileName(fb));
-			lines.Add("ECU: " + ia + ((ib != ia) ? (" / " + ib) : "") + ((mod != null) ? ("  (" + mod.Name + ")") : ""));
-			lines.Add("");
-			SortedSet<string> zones = new SortedSet<string>();
-			foreach (string k in da.Keys) { zones.Add(k); }
-			foreach (string k in db.Keys) { zones.Add(k); }
-			int diffs = 0;
-			foreach (string z in zones)
-			{
-				string va = da.ContainsKey(z) ? da[z] : null;
-				string vb = db.ContainsKey(z) ? db[z] : null;
-				if (va == vb) { continue; }
-				diffs++;
-				Zone zdef = (mod != null) ? mod.Zones.FirstOrDefault((Zone zz) => zz.Id.Equals(z, StringComparison.OrdinalIgnoreCase)) : null;
-				lines.Add(z + ((zdef != null) ? ("  " + zdef.Name) : "") + ":  " + (va ?? "-") + "  ->  " + (vb ?? "-"));
-				if (zdef != null && va != null && vb != null)
-				{
-					byte[] ba = Hex.ToBytes(va); byte[] bb = Hex.ToBytes(vb);
-					foreach (Field f in zdef.Fields)
-					{
-						string la = this.DecodeField(mod, f, ba); string lb2 = this.DecodeField(mod, f, bb);
-						if (la != null && lb2 != null && la != lb2) { lines.Add("      " + f.L(this.lang) + ": " + la + "  ->  " + lb2); }
-					}
-				}
-			}
-			if (diffs == 0) { lines.Add(fi ? "Ei eroja." : "No differences."); }
-			this.ShowReport((fi ? "Vertaa varmuuskopioita" : "Compare backups"), lines, "compare_" + ia + ".txt");
-		}
 		private void ShowDtc(string title, List<string> items, string raw)
 		{
 			Form form = new Form
@@ -5223,12 +5120,12 @@ int num = r.IndexOf("5902");
 					{
 						if (clear)
 						{
-							string text = this.Tx(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "14FF00" : "14FFFFFF", 1500);
+							string text = this.Tx((this.curMod.Id == "BSI2004" || (this.curMod.Tx != null && this.curMod.Tx.StartsWith("KL"))) ? "14FF00" : "14FFFFFF", 1500);
 							this.L(text.Contains("54") ? "DTC cleared (54)." : ("Clear: " + text));
 							Thread.Sleep(300);
 						}
-						string text2 = this.Tx(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "17FF00" : "19020C", 1500);
-						this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+						string text2 = this.Tx((this.curMod.Tx != null && this.curMod.Tx.StartsWith("KL")) ? "1800FF00" : ((this.curMod.Id == "BSI2004") ? "17FF00" : "19020C"), 1500);
+						this.Tx((this.curMod != null && this.curMod.Id == "BSI2004") ? "1081" : "1001", 300);
 						this.L("DTC (" + this.curMod.Id + "): " + text2);
 						this.ShowDtc(((this.lang == "fi") ? "Vikakoodit: " : "DTCs: ") + this.curMod.Id, this.DtcDecode(text2), text2);
 					}
@@ -5287,12 +5184,6 @@ int num = r.IndexOf("5902");
 
 		private Panel fieldsHost;
 
-			private TextBox txtSearch;
-
-			private Label lblSearch;
-
-		private CheckBox chkDecoded;
-
 		// Token: 0x0400004F RID: 79
 		private Label lblStatus;
 
@@ -5333,7 +5224,7 @@ int num = r.IndexOf("5902");
 		private List<Module> shown = new List<Module>();
 
 		// Token: 0x0400005C RID: 92
-		private string lang = "fi";
+		private string lang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("fi", StringComparison.OrdinalIgnoreCase) ? "fi" : "en";
 
 		// Token: 0x0400005D RID: 93
 		private bool busy = false;
@@ -5349,14 +5240,6 @@ int num = r.IndexOf("5902");
 
 		// Token: 0x04000061 RID: 97
 		private ToolStripMenuItem menuRip;
-
-			private ToolStripMenuItem menuView;
-
-			private ToolStripMenuItem menuProfiles;
-
-			private ToolStripMenuItem menuExport;
-
-			private ToolStripMenuItem menuCompare;
 	}
 	// Token: 0x02000016 RID: 22
 	internal static class Program
@@ -5365,11 +5248,11 @@ int num = r.IndexOf("5902");
 		[STAThread]
 		private static void Main()
 		{
-			Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException); Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { MessageBox.Show(e.Exception.ToString(), "Virhe"); };
+			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
 			try
 			{
-				Data.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zones.json"));
+				Data.Load(Path.Combine(Environment.CurrentDirectory, "zones.json"));
 			}
 			catch (Exception ex)
 			{
@@ -5378,14 +5261,14 @@ int num = r.IndexOf("5902");
 			}
 			try
 			{
-				Data.LoadDtc(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dtc.json"));
+				Data.LoadDtc(Path.Combine(Environment.CurrentDirectory, "dtc.json"));
 			}
 			catch
 			{
 			}
 			try
 			{
-				Data.LoadOverlay(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "diagbox_overlay.json"));
+				Data.LoadOverlay(Path.Combine(Environment.CurrentDirectory, "diagbox_overlay.json"));
 			}
 			catch
 			{
@@ -5394,3 +5277,25 @@ int num = r.IndexOf("5902");
 		}
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
