@@ -3041,7 +3041,7 @@ this.PopulateModules(Data.Modules);
 				else
 				{
 					string text;
-					if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString() == "Delphi DS150E") { string port = this.ds150e.Open(""); if (this.ds150e.IsOpen) { this.trans = this.ds150e; this.lblStatus.Text = "Yhdistetty: " + port; this.lblStatus.ForeColor = System.Drawing.Color.LimeGreen; this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; } else { MessageBox.Show("Delphi DS150E -laitetta ei loytynyt.", "Delphi DS150E", MessageBoxButtons.OK, MessageBoxIcon.Warning); } return; } else if (this.Vci())
+					if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString() == "Delphi DS150E") { this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; string port = this.ds150e.Open(""); if (this.ds150e.IsOpen) { this.trans = this.ds150e; this.lblStatus.Text = "Yhdistetty: " + port; this.lblStatus.ForeColor = System.Drawing.Color.LimeGreen; this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; } else { MessageBox.Show("Delphi DS150E -laitetta ei loytynyt.", "Delphi DS150E", MessageBoxButtons.OK, MessageBoxIcon.Warning); } return; } else if (this.Vci())
 					{
 						VciTransport vciTransport = new VciTransport
 						{

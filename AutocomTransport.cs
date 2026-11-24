@@ -19,7 +19,7 @@ namespace ZoneTool
         private bool isKLine = false;
         public Action<string> Log { get; set; }
         public bool IsOpen { get { return (hUsb != IntPtr.Zero) || (sp != null && sp.IsOpen); } }
-        public string ActivePort { get; private set; }
+        public static AutocomTransport SharedInstance { get; set; } public string ActivePort { get; private set; }
         public string FirmwareInfo { get; private set; }
         public double ObdVoltage { get; private set; }
 
@@ -92,7 +92,7 @@ namespace ZoneTool
                 hDev = CreateFile(path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
                 if (hDev != null && !hDev.IsInvalid && WinUsb_Initialize(hDev, out hUsb))
                 {
-                    ActivePort = "WinUSB (VID_0403&PID_D6DA)";
+                    ActivePort = "WinUSB (VID_0403&PID_D6DA)"; SharedInstance = this;
                     uint tmo = 350; WinUsb_SetPipePolicy(hUsb, 0x81, 3, 4, ref tmo); WinUsb_SetPipePolicy(hUsb, 0x02, 3, 4, ref tmo);
                     Ctrl(0x00, 0x0000); Ctrl(0x03, 0x001A); Ctrl(0x04, 0x0008); Ctrl(0x01, 0x0303);
                     ReadRaw(60); WLog("Avattu " + ActivePort); ProbeHardwareInfo(); return ActivePort;
