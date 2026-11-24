@@ -3085,7 +3085,7 @@ this.PopulateModules(Data.Modules);
 					}
 					else
 					{
-						this.lblStatus.Text = this.T("connto") + (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem.ToString());
+						this.lblStatus.Text = this.T("connto") + (this.trans is AutocomTransport ? ((AutocomTransport)this.trans).ActivePort : (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem.ToString()));
 						this.lblStatus.ForeColor = Theme.Green;
 						this.btnConn.Text = this.T("disc");
 						if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString().Contains("K-Line"))
@@ -3296,7 +3296,7 @@ return;
 							this.PopulateModules(present);
 							this.L(((this.lang == "fi") ? "L\u00f6ytyi " : "Found ") + present.Count + ((this.lang == "fi") ? " ohjainlaitetta v\u00e4yl\u00e4lt\u00e4." : " ECUs on the bus."));
 						}
-						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.Vci() ? "Diagbox VCI" : (this.Demo() ? "Demo" : this.cbPort.SelectedItem))) : this.T("noconn"));
+						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.trans is AutocomTransport ? ((AutocomTransport)this.trans).ActivePort : (this.Vci() ? "Diagbox VCI" : (this.Demo() ? "Demo" : this.cbPort.SelectedItem)))) : this.T("noconn"));
 						this.lblStatus.ForeColor = ((this.trans != null && this.trans.IsOpen) ? Theme.Green : Theme.Red);
 						if (vinMiss.Count > 0)
 						{
@@ -3655,7 +3655,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 						this.btnWrite.Enabled = (this.views.Count > 0);
 						this.busy = false;
 						this.SetButtons(true);
-						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem)) : this.T("noconn"));
+						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.trans is AutocomTransport ? ((AutocomTransport)this.trans).ActivePort : (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem))) : this.T("noconn"));
 						this.lblStatus.ForeColor = ((this.trans != null && this.trans.IsOpen) ? Theme.Green : Theme.Red);
 						this.L(string.Concat(new object[]
 						{
@@ -3749,7 +3749,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 						this.btnWrite.Enabled = (this.views.Count > 0);
 						this.busy = false;
 						this.SetButtons(true);
-						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem)) : this.T("noconn"));
+						this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.trans is AutocomTransport ? ((AutocomTransport)this.trans).ActivePort : (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem))) : this.T("noconn"));
 						this.lblStatus.ForeColor = ((this.trans != null && this.trans.IsOpen) ? Theme.Green : Theme.Red);
 						this.L(((this.lang == "fi") ? "Skannaus valmis: " : "Scan done: ") + list.Count + ((this.lang == "fi") ? " zonea l\u00f6ytyi." : " zones found."));
 					}));
@@ -4858,7 +4858,7 @@ this.PopulateModules(Data.Modules);
 									{
 										this.busy = false;
 										this.SetButtons(true);
-										this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem)) : this.T("noconn"));
+										this.lblStatus.Text = ((this.trans != null && this.trans.IsOpen) ? (this.T("connto") + (this.trans is AutocomTransport ? ((AutocomTransport)this.trans).ActivePort : (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem))) : this.T("noconn"));
 										this.lblStatus.ForeColor = ((this.trans != null && this.trans.IsOpen) ? Theme.Green : Theme.Red);
 										this.views = new List<ZoneView>();
 										this.Render();
