@@ -1360,26 +1360,36 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		}
 
 		// Token: 0x0600004C RID: 76 RVA: 0x0000439C File Offset: 0x0000259C
-		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string ProbeVciIds(int obdPin)
+		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string ProbeVci68k(int obdPin)
         {
             if (!this.IsOpen) { string o = this.Open(""); if (!this.IsOpen) return "VCI ei auki: " + o; }
-            var sb = new StringBuilder("=== ACTIA VCI PROTOKOLLA-ID HAKU 0..100 (Pin " + obdPin + ") ===\r\n");
-            byte[] buf = new byte[64];
-            for (int p = 0; p <= 100; p++)
+            var sb = new StringBuilder("=== ACTIA VCI .68K FIRMWARE & 1997 406 D8 SKANNERI (Pin " + obdPin + ") ===\r\n");
+            string[] firmwares = new string[] {
+                "P_5B.68K", "p_5B02.68K", "P_5BTO.68K", "P_5BX250.68K",
+                "P_PSA2.68K", "P_FAST.68K", "p_FAST02.68K", "p_FASTTO.68K",
+                @"C:\AWRoot\drv\P_5B.68K", @"C:\AWRoot\drv\p_5B02.68K", @"C:\AWRoot\drv\P_PSA2.68K", @"C:\AWRoot\drv\P_FAST.68K"
+            };
+            foreach (string fw in firmwares)
             {
                 try
                 {
-                    int b = BindProtocol(buf, p);
-                    if (b != -7 && b != -9)
+                    byte[] fwBytes = Encoding.ASCII.GetBytes(fw + "\0");
+                    int b = BindProtocol(fwBytes, 0);
+                    sb.AppendLine(string.Format("BindProtocol(\"{0}\", 0) -> {1}", fw, b));
+                    if (b == 0)
                     {
-                        sb.AppendLine(string.Format("BindProtocol(buf, {0}) -> {1}", p, b));
-                    }
-                    else if (p <= 15)
-                    {
-                        sb.AppendLine(string.Format("BindProtocol(buf, {0}) -> {1}", p, b));
+                        foreach (byte addr in new byte[] { 0x10, 0x13, 0x33, 0x01, 0x28, 0x20, 0x68 })
+                        {
+                            try
+                            {
+                                string rx = this.VciKlineTxRx("33" + addr.ToString("X2"), 1200);
+                                sb.AppendLine(string.Format("   >>> [{0}] Osoite 0x{1:X2} -> {2}", fw, addr, rx));
+                            }
+                            catch (Exception ex2) { sb.AppendLine("   TxRx err: " + ex2.Message); }
+                        }
                     }
                 }
-                catch { }
+                catch (Exception ex) { sb.AppendLine("Err: " + ex.Message); }
             }
             string resStr = sb.ToString();
             try { string ld = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"); Directory.CreateDirectory(ld); File.AppendAllText(Path.Combine(ld, "VCI_Log_" + DateTime.Now.ToString("yyyyMMdd") + ".txt"), resStr + Environment.NewLine); } catch { }
@@ -1993,7 +2003,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer v1.9.8 (+ PSA K-Line / MP 7.0)";
+			this.Text = "Stellantis Config Messer v1.9.9 (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
@@ -2993,7 +3003,7 @@ this.PopulateModules(Data.Modules);
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer v1.9.8 (+ PSA K-Line / MP 7.0)";
+					this.Text = "Stellantis Config Messer v1.9.9 (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
