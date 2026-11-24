@@ -109,7 +109,7 @@ namespace ZoneTool
                     return ActivePort;
                 }
             }
-            foreach (string p in (string.IsNullOrEmpty(portOrNull) ? SerialPort.GetPortNames() : new string[] { portOrNull }))
+            foreach (string p in (string.IsNullOrEmpty(portOrNull) ? new string[0] : new string[] { portOrNull }))
             {
                 try { sp = new SerialPort(p, 115200) { ReadTimeout = 400, WriteTimeout = 400, DtrEnable = true, RtsEnable = true }; sp.Open(); ActivePort = p; WLog("Avattu " + p); return p; } catch { }
             }

@@ -4116,7 +4116,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 		{
 			if (fi)
 			{
-				return "\u2022  Valitse yhteystapa (Arduino / Diagbox VCI / ELM327 / Delphi DS150E / Delphi DS150E) ja portti, paina Yhdist\u00e4.\n" +
+				return "\u2022  Valitse yhteystapa (Arduino / Diagbox VCI / ELM327 / Delphi DS150E) ja portti, paina Yhdist\u00e4.\n" +
 					"    Tai valitse Demo ja selaa kaikkia ohjainlaitteita ja zoneja ilman autoa.\n\n" +
 					"\u2022  Valitse ohjainlaite (ECU) yl\u00e4reunan pudotusvalikosta.\n\n" +
 					"\u2022  Lue  \u2013  hakee ECU:n kaikki konfiguraatiozonet. Kentt\u00e4 n\u00e4kyy kytkimen\u00e4, pudotusvalikkona\n" +
@@ -4127,7 +4127,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 					"\u2022  Ty\u00f6kalut-valikko:  palauta konfiguraatio backupista  tai  aja Diagbox DataRipper.\n\n" +
 					"\u26a0  K\u00e4yt\u00e4 omalla vastuulla, vain omaan autoosi, vakaalla j\u00e4nnitteell\u00e4.";
 			}
-			return "\u2022  Pick an interface (Arduino / Diagbox VCI / ELM327 / Delphi DS150E / Delphi DS150E) and port, then press Connect.\n" +
+			return "\u2022  Pick an interface (Arduino / Diagbox VCI / ELM327 / Delphi DS150E) and port, then press Connect.\n" +
 				"    Or pick Demo to browse every ECU and zone without a car.\n\n" +
 				"\u2022  Select an ECU from the drop-down at the top.\n\n" +
 				"\u2022  Read  \u2013  fetches all of the ECU's config zones. A field shows as a toggle, a drop-down\n" +
