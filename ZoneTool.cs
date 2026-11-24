@@ -1360,32 +1360,35 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		}
 
 		// Token: 0x0600004C RID: 76 RVA: 0x0000439C File Offset: 0x0000259C
-		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string ProbeVci68k(int obdPin)
+		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string ProbeVciExact(int obdPin)
         {
             if (!this.IsOpen) { string o = this.Open(""); if (!this.IsOpen) return "VCI ei auki: " + o; }
-            var sb = new StringBuilder("=== ACTIA VCI .68K FIRMWARE & 1997 406 D8 SKANNERI (Pin " + obdPin + ") ===\r\n");
-            string[] firmwares = new string[] {
+            var sb = new StringBuilder("=== ACTIA VCI PROTOKOLLA & 1997 406 D8 SKANNERI v2.0.0 (Pin " + obdPin + ") ===\r\n");
+            int c1 = VciTransport.ChangeComLine(obdPin);
+            sb.AppendLine(string.Format("ChangeComLine({0}) -> {1}", obdPin, c1));
+
+            string[] names = new string[] {
                 "P_5B.68K", "p_5B02.68K", "P_5BTO.68K", "P_5BX250.68K",
                 "P_PSA2.68K", "P_FAST.68K", "p_FAST02.68K", "p_FASTTO.68K",
-                @"C:\AWRoot\drv\P_5B.68K", @"C:\AWRoot\drv\p_5B02.68K", @"C:\AWRoot\drv\P_PSA2.68K", @"C:\AWRoot\drv\P_FAST.68K"
+                "ISO9141", "ISO9141_2", "KWP2000", "PSA2000", "ISO14230",
+                "PROT_ISO14230_3_ON_ISO14230_2", "PROT_ISO9141_2_ON_ISO9141_2",
+                "C:\\AWRoot\\drv\\P_5B.68K", "C:\\AWRoot\\drv\\p_5B02.68K", "C:\\AWRoot\\drv\\P_PSA2.68K", "C:\\AWRoot\\drv\\P_FAST.68K"
             };
-            foreach (string fw in firmwares)
+            foreach (string nm in names)
             {
                 try
                 {
-                    byte[] fwBytes = Encoding.ASCII.GetBytes(fw + "\0");
-                    int b = BindProtocol(fwBytes, 0);
-                    sb.AppendLine(string.Format("BindProtocol(\"{0}\", 0) -> {1}", fw, b));
+                    byte[] pBytes = Encoding.ASCII.GetBytes(nm);
+                    int b = VciTransport.BindProtocol(pBytes, pBytes.Length);
+                    sb.AppendLine(string.Format("BindProtocol(\"{0}\", len={1}) -> {2}", nm, pBytes.Length, b));
                     if (b == 0)
                     {
                         foreach (byte addr in new byte[] { 0x10, 0x13, 0x33, 0x01, 0x28, 0x20, 0x68 })
                         {
-                            try
-                            {
-                                string rx = this.VciKlineTxRx("33" + addr.ToString("X2"), 1200);
-                                sb.AppendLine(string.Format("   >>> [{0}] Osoite 0x{1:X2} -> {2}", fw, addr, rx));
-                            }
-                            catch (Exception ex2) { sb.AppendLine("   TxRx err: " + ex2.Message); }
+                            byte[] initIn = new byte[] { addr, 0x00 };
+                            byte[] initOut = new byte[64];
+                            int c3 = VciTransport.PerformInit(initIn, initIn.Length, initOut, initOut.Length);
+                            sb.AppendLine(string.Format("   >>> [{0}] PerformInit(0x{1:X2}) -> {2} | {3}", nm, addr, c3, BitConverter.ToString(initOut, 0, 8)));
                         }
                     }
                 }
@@ -2003,7 +2006,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer v1.9.9 (+ PSA K-Line / MP 7.0)";
+			this.Text = "Stellantis Config Messer v2.0.0 (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
@@ -3003,7 +3006,7 @@ this.PopulateModules(Data.Modules);
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer v1.9.9 (+ PSA K-Line / MP 7.0)";
+					this.Text = "Stellantis Config Messer v2.0.0 (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
