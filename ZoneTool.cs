@@ -2008,7 +2008,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer v1.9.6 (+ PSA K-Line / MP 7.0)";
+			this.Text = "Stellantis Config Messer v1.9.7 (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
@@ -3008,7 +3008,7 @@ this.PopulateModules(Data.Modules);
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer v1.9.6 (+ PSA K-Line / MP 7.0)";
+					this.Text = "Stellantis Config Messer v1.9.7 (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
