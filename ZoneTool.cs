@@ -1852,7 +1852,6 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 	// Token: 0x02000015 RID: 21
 	internal class MainForm : Form
 	{
-        private AutocomTransport ds150e = new AutocomTransport();
 		// Token: 0x0600006E RID: 110 RVA: 0x00004E08 File Offset: 0x00003008
 		private string T(string key)
 		{
@@ -1987,7 +1986,8 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		}
 
 		// Token: 0x0600006F RID: 111 RVA: 0x00005068 File Offset: 0x00003268
-		private bool Vci()
+		private AutocomTransport ds150e = new AutocomTransport();
+        private bool Vci()
 		{
 			return this.cbTrans.SelectedIndex == 1;
 		}
@@ -2050,6 +2050,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 			this.cbTrans.Items.Add("Diagbox VCI");
 			this.cbTrans.Items.Add("ELM327");
 			this.cbTrans.Items.Add("Demo");
+            this.cbTrans.Items.Add("Delphi DS150E");
 			this.cbTrans.SelectedIndex = 0;
 			this.cbTrans.SelectedIndexChanged += delegate(object s, EventArgs e)
 			{
@@ -3040,7 +3041,7 @@ this.PopulateModules(Data.Modules);
 				else
 				{
 					string text;
-					if (this.Vci())
+					if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString() == "Delphi DS150E") { string res = this.ds150e.OpenAndProbe(""); MessageBox.Show(res, "Delphi DS150E", MessageBoxButtons.OK, MessageBoxIcon.Information); if (this.ds150e.IsOpen) { this.lblStatus.Text = "Yhdistetty: " + this.ds150e.ActivePort; this.lblStatus.ForeColor = System.Drawing.Color.LimeGreen; } return; } else if (this.Vci())
 					{
 						VciTransport vciTransport = new VciTransport
 						{
