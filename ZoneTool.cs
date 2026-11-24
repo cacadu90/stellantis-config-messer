@@ -1360,32 +1360,39 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		}
 
 		// Token: 0x0600004C RID: 76 RVA: 0x0000439C File Offset: 0x0000259C
-		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string ProbeVciBytes(int obdPin)
+		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string Scan406D8AllPins()
         {
             if (!this.IsOpen) { string o = this.Open(""); if (!this.IsOpen) return "VCI ei auki: " + o; }
-            var sb = new StringBuilder("=== ACTIA VCI 3-TAVU PROTOKOLLA-ID SKANNERI v2.0.1 (Pin " + obdPin + ") ===\r\n");
-            sb.AppendLine("PD_DIAG_ON_CAN tavut: " + BitConverter.ToString(PD_DIAG_ON_CAN));
-            int c1 = VciTransport.ChangeComLine(obdPin);
-            sb.AppendLine(string.Format("ChangeComLine({0}) -> {1}", obdPin, c1));
+            var sb = new StringBuilder("=== 1997 PEUGEOT 406 D8 TAYSI PINNI- & HERATESSKANNERI v2.0.2 ({2,16,232} OK!) ===\r\n");
+            int[] pins = new int[] { 7, 15, 11, 12, 13, 8, 3, 1 };
+            byte[] addrs = new byte[] { 0x10, 0x13, 0x01, 0x33, 0x11, 0x7A, 0x68, 0x28 };
 
-            for (byte p = 0; p <= 60; p++)
+            foreach (int pin in pins)
             {
-                byte[] desc = new byte[] { p, 16, 232 };
-                int b = VciTransport.BindProtocol(desc, desc.Length);
-                if (b != -7)
+                int c1 = VciTransport.ChangeComLine(pin);
+                int c2 = VciTransport.BindProtocol(PD_KWP2000, PD_KWP2000.Length);
+                if (c1 != 0 || c2 != 0)
                 {
-                    sb.AppendLine(string.Format("BindProtocol({{ {0}, 16, 232 }}) -> {1}", p, b));
-                    if (b == 0)
+                    sb.AppendLine(string.Format("Pin {0}: ChangeComLine={1}, Bind={2}", pin, c1, c2));
+                    continue;
+                }
+                bool hit = false;
+                foreach (byte addr in addrs)
+                {
+                    foreach (byte mode in new byte[] { 0, 1 })
                     {
-                        foreach (byte addr in new byte[] { 0x10, 0x13, 0x33, 0x01, 0x28, 0x20, 0x68 })
+                        byte[] initIn = new byte[] { addr, mode };
+                        byte[] initOut = new byte[64];
+                        int c3 = VciTransport.PerformInit(initIn, initIn.Length, initOut, initOut.Length);
+                        if (c3 == 0)
                         {
-                            byte[] initIn = new byte[] { addr, 0x00 };
-                            byte[] initOut = new byte[64];
-                            int c3 = VciTransport.PerformInit(initIn, initIn.Length, initOut, initOut.Length);
-                            sb.AppendLine(string.Format("   >>> [ID={0}] PerformInit(0x{1:X2}) -> {2} | {3}", p, addr, c3, BitConverter.ToString(initOut, 0, 8)));
+                            hit = true;
+                            sb.AppendLine(string.Format(">>> OSUMUS! Pin {0} | Osoite 0x{1:X2} | Mode={2} ({3}) -> OK! KeyBytes: {4}",
+                                pin, addr, mode, (mode == 0 ? "5-Baud" : "FastInit"), BitConverter.ToString(initOut, 0, 8)));
                         }
                     }
                 }
+                if (!hit) sb.AppendLine(string.Format("Pin {0}: Bind OK (0), ei vastausta (tarkista virrat / Economy Mode)", pin));
             }
             string resStr = sb.ToString();
             try { string ld = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"); Directory.CreateDirectory(ld); File.AppendAllText(Path.Combine(ld, "VCI_Log_" + DateTime.Now.ToString("yyyyMMdd") + ".txt"), resStr + Environment.NewLine); } catch { }
@@ -1999,7 +2006,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer v2.0.1 (+ PSA K-Line / MP 7.0)";
+			this.Text = "Stellantis Config Messer v2.0.2 (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
@@ -2999,7 +3006,7 @@ this.PopulateModules(Data.Modules);
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer v2.0.1 (+ PSA K-Line / MP 7.0)";
+					this.Text = "Stellantis Config Messer v2.0.2 (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
