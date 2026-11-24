@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.IO.Ports;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -7,12 +8,16 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ZoneTool
 {
-    public class AutocomTransport : IDisposable
+    public class AutocomTransport : ITransport, IDisposable
     {
         private static readonly Guid G_USB = new Guid("A5DCBF10-6530-11D2-901F-00C04FB951ED");
         private SafeFileHandle hDev;
         private IntPtr hUsb = IntPtr.Zero;
         private SerialPort sp;
+        private string curTx = "7E0", curRx = "7E8";
+        private bool isKLine = false;
+
+        public Action<string> Log { get; set; }
         public bool IsOpen { get { return (hUsb != IntPtr.Zero) || (sp != null && sp.IsOpen); } }
         public string ActivePort { get; private set; }
 
@@ -31,6 +36,8 @@ namespace ZoneTool
         [DllImport("winusb.dll")] static extern bool WinUsb_WritePipe(IntPtr u, byte pid, byte[] b, uint l, out uint x, IntPtr o);
         [DllImport("winusb.dll")] static extern bool WinUsb_ReadPipe(IntPtr u, byte pid, byte[] b, uint l, out uint x, IntPtr o);
         [DllImport("winusb.dll")] static extern bool WinUsb_SetPipePolicy(IntPtr u, byte pid, uint pt, uint vl, ref uint v);
+
+        private void WLog(string m) { if (Log != null) Log("[DS150E] " + m); }
 
         private string FindPath()
         {
@@ -55,16 +62,39 @@ namespace ZoneTool
             return null;
         }
 
-        private void Ctrl(byte req, ushort val)
+        private void Ctrl(byte req, ushort val) { uint x = 0; WinUsb_ControlTransfer(hUsb, new SETUP_PKT { ReqType = 0x40, Req = req, Val = val }, null, 0, out x, IntPtr.Zero); }
+
+        private int WriteRaw(byte[] d)
         {
-            uint x = 0;
-            WinUsb_ControlTransfer(hUsb, new SETUP_PKT { ReqType = 0x40, Req = req, Val = val, Idx = 0, Len = 0 }, null, 0, out x, IntPtr.Zero);
+            if (hUsb != IntPtr.Zero) { uint w = 0; WinUsb_WritePipe(hUsb, 0x02, d, (uint)d.Length, out w, IntPtr.Zero); return (int)w; }
+            if (sp != null && sp.IsOpen) { sp.Write(d, 0, d.Length); return d.Length; }
+            return 0;
         }
 
-        public string OpenAndProbe(string pref)
+        private byte[] ReadRaw(int ms)
+        {
+            Thread.Sleep(ms);
+            if (hUsb != IntPtr.Zero)
+            {
+                byte[] rx = (byte[])Array.CreateInstance(typeof(byte), 256);
+                uint r = 0; WinUsb_ReadPipe(hUsb, 0x81, rx, 256, out r, IntPtr.Zero);
+                if (r <= 2) return (byte[])Array.CreateInstance(typeof(byte), 0);
+                byte[] p = (byte[])Array.CreateInstance(typeof(byte), (int)(r - 2));
+                Array.Copy(rx, 2, p, 0, p.Length); return p;
+            }
+            if (sp != null && sp.IsOpen && sp.BytesToRead > 0)
+            {
+                byte[] b = (byte[])Array.CreateInstance(typeof(byte), sp.BytesToRead);
+                int n = sp.Read(b, 0, b.Length);
+                byte[] p = (byte[])Array.CreateInstance(typeof(byte), n);
+                Array.Copy(b, 0, p, 0, n); return p;
+            }
+            return (byte[])Array.CreateInstance(typeof(byte), 0);
+        }
+
+        public string Open(string portOrNull)
         {
             Close();
-            var sb = new StringBuilder("=== AUTOCOM / DELPHI DS150E (WinUSB + COM) ===\r\n");
             string path = FindPath();
             if (!string.IsNullOrEmpty(path))
             {
@@ -72,56 +102,61 @@ namespace ZoneTool
                 if (hDev != null && !hDev.IsInvalid && WinUsb_Initialize(hDev, out hUsb))
                 {
                     ActivePort = "WinUSB (VID_0403&PID_D6DA)";
-                    uint tmo = 400;
-                    WinUsb_SetPipePolicy(hUsb, 0x81, 3, 4, ref tmo);
-                    WinUsb_SetPipePolicy(hUsb, 0x02, 3, 4, ref tmo);
+                    uint tmo = 350; WinUsb_SetPipePolicy(hUsb, 0x81, 3, 4, ref tmo); WinUsb_SetPipePolicy(hUsb, 0x02, 3, 4, ref tmo);
                     Ctrl(0x00, 0x0000); Ctrl(0x03, 0x001A); Ctrl(0x04, 0x0008); Ctrl(0x01, 0x0303);
-                    Thread.Sleep(100);
-                    byte[] rx = (byte[])Array.CreateInstance(typeof(byte), 64);
-                    uint w = 0, r = 0;
-                    WinUsb_ReadPipe(hUsb, 0x81, rx, 64, out r, IntPtr.Zero);
-                    byte[] cmd = new byte[] { 0x01, 0x00 };
-                    bool ok = WinUsb_WritePipe(hUsb, 0x02, cmd, 2, out w, IntPtr.Zero);
-                    Thread.Sleep(150);
-                    WinUsb_ReadPipe(hUsb, 0x81, rx, 64, out r, IntPtr.Zero);
-                    sb.AppendLine("WinUSB avattu: " + ActivePort);
-                    sb.AppendLine("FTDI 115200 bps OK (WritePipe=" + ok + ", lahetetty=" + w + " tavua)");
-                    sb.AppendLine("FTDI/DS150E vastaus (" + r + " tavua): " + (r > 0 ? BitConverter.ToString(rx, 0, (int)r) : "0 tavua"));
-                    return sb.ToString();
+                    ReadRaw(60); WriteRaw(new byte[] { 0x01, 0x00 }); ReadRaw(80);
+                    WLog("Avattu " + ActivePort);
+                    return ActivePort;
                 }
             }
-            foreach (string p in (string.IsNullOrEmpty(pref) ? SerialPort.GetPortNames() : new string[] { pref }))
+            foreach (string p in (string.IsNullOrEmpty(portOrNull) ? SerialPort.GetPortNames() : new string[] { portOrNull }))
             {
-                try { sp = new SerialPort(p, 115200) { ReadTimeout = 500, WriteTimeout = 500, DtrEnable = true, RtsEnable = true }; sp.Open(); ActivePort = p; sb.AppendLine("COM avattu: " + p); return sb.ToString(); } catch { }
+                try { sp = new SerialPort(p, 115200) { ReadTimeout = 400, WriteTimeout = 400, DtrEnable = true, RtsEnable = true }; sp.Open(); ActivePort = p; WLog("Avattu " + p); return p; } catch { }
             }
-            return sb.AppendLine("Autocom-laitetta ei loytynyt.").ToString();
+            WLog("DS150E-laitetta ei loytynyt."); return null;
         }
 
-        public string ScanKlineDs150(int pin)
+        public string OpenAndProbe(string pref) { string r = Open(pref); return IsOpen ? ("Yhteys: " + r) : "Ei yhteytta"; }
+
+        public void SelectEcu(string tx, string rx)
         {
-            if (!IsOpen) { string m = OpenAndProbe(ActivePort); if (!IsOpen) return m; }
-            var sb = new StringBuilder("=== DS150E K-LINE TESTI (" + ActivePort + ", Pin " + pin + ") ===\r\n");
-            if (hUsb != IntPtr.Zero)
+            curTx = (tx ?? "7E0").Trim(); curRx = (rx ?? "7E8").Trim();
+            isKLine = curTx.StartsWith("KLINE", StringComparison.OrdinalIgnoreCase) || curTx.Length <= 2;
+            WLog("SelectEcu TX=" + curTx + " RX=" + curRx + (isKLine ? " [K-Line]" : " [CAN]"));
+            if (!IsOpen) return;
+            if (isKLine) { WriteRaw(new byte[] { 0x02, 0x07, 0x0F }); ReadRaw(60); }
+            else
             {
-                byte[] cmd = new byte[] { 0x02, (byte)pin, 0x0F };
-                uint w = 0, r = 0;
-                WinUsb_WritePipe(hUsb, 0x02, cmd, 3, out w, IntPtr.Zero);
-                Thread.Sleep(120);
-                byte[] rx = (byte[])Array.CreateInstance(typeof(byte), 64);
-                WinUsb_ReadPipe(hUsb, 0x81, rx, 64, out r, IntPtr.Zero);
-                sb.AppendLine("MUX Pin " + pin + " lahetetty (" + w + " tavua) -> vastaus: " + (r > 0 ? BitConverter.ToString(rx, 0, (int)r) : "odottaa 12V OBD-virtaa"));
+                ushort t = 0x7E0, r = 0x7E8;
+                ushort.TryParse(curTx.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out t);
+                ushort.TryParse(curRx.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out r);
+                WriteRaw(new byte[] { 0x03, (byte)(t >> 8), (byte)(t & 0xFF), (byte)(r >> 8), (byte)(r & 0xFF) }); ReadRaw(60);
             }
+        }
+
+        public string Send(string cmdHex, string[] tokens, int maxMs)
+        {
+            if (!IsOpen) return "";
+            string c = (cmdHex ?? "").Replace(" ", "").Replace("-", "");
+            if (c.Length % 2 != 0) c = "0" + c;
+            byte[] pay = (byte[])Array.CreateInstance(typeof(byte), c.Length / 2);
+            for (int i = 0; i < pay.Length; i++) pay[i] = byte.Parse(c.Substring(i * 2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            WLog(">> " + c);
+            byte[] frm = (byte[])Array.CreateInstance(typeof(byte), isKLine ? (pay.Length + 2) : 10);
+            if (isKLine) { frm[0] = 0x06; frm[1] = (byte)pay.Length; Array.Copy(pay, 0, frm, 2, pay.Length); }
+            else { frm[0] = 0x07; frm[1] = (byte)(pay.Length & 0x0F); Array.Copy(pay, 0, frm, 2, Math.Min(pay.Length, 7)); }
+            WriteRaw(frm);
+            byte[] resp = ReadRaw(Math.Min(Math.Max(maxMs, 80), 500));
+            if (resp.Length == 0) { WLog("<< (ei vastausta)"); return ""; }
+            int off = (!isKLine && (resp[0] & 0xF0) == 0x00 && resp.Length > 1) ? 1 : 0;
+            StringBuilder sb = new StringBuilder();
+            for (int i = off; i < resp.Length; i++) sb.AppendFormat("{0:X2}", resp[i]);
+            WLog("<< " + sb.ToString());
             return sb.ToString();
         }
 
-        public void Close()
-        {
-            try { if (hUsb != IntPtr.Zero) { WinUsb_Free(hUsb); hUsb = IntPtr.Zero; } } catch { }
-            try { if (hDev != null && !hDev.IsInvalid) { hDev.Close(); hDev.Dispose(); } } catch { }
-            hDev = null;
-            try { if (sp != null) { if (sp.IsOpen) sp.Close(); sp.Dispose(); } } catch { }
-            sp = null;
-        }
+        public string ScanKlineDs150(int pin) { SelectEcu("KLINE", "10"); return "K-Line Pin " + pin + " valmis."; }
+        public void Close() { try { if (hUsb != IntPtr.Zero) { WinUsb_Free(hUsb); hUsb = IntPtr.Zero; } } catch { } try { if (hDev != null && !hDev.IsInvalid) { hDev.Close(); hDev.Dispose(); } } catch { } hDev = null; try { if (sp != null) { if (sp.IsOpen) sp.Close(); sp.Dispose(); } } catch { } sp = null; }
         public void Dispose() { Close(); }
     }
 }
