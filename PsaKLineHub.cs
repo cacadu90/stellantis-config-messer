@@ -23,7 +23,7 @@ namespace ZoneTool
         private AutocomTransport autocom = new AutocomTransport(); public PsaKLineForm(string lang, object tr = null) { this.vci = tr as VciTransport; InitVciForm(lang); } private void InitVciForm(string lang)
         {
             bool fi = (lang == "fi");
-            this.Text = fi ? "PSA K-Line & Bosch MP 7.0 Diagnostiikka (675 ECU) - v2.2.0" : "PSA K-Line & Bosch MP 7.0 Diagnostics (675 ECUs) - v2.2.0";
+            this.Text = fi ? "PSA K-Line & Bosch MP 7.0 Diagnostiikka (675 ECU) - v2.3.0" : "PSA K-Line & Bosch MP 7.0 Diagnostics (675 ECUs) - v2.3.0";
             this.Width = 1060; this.Height = 680; this.StartPosition = FormStartPosition.CenterParent;
             this.BackColor = Color.FromArgb(20, 26, 36); this.ForeColor = Color.White; this.Font = new Font("Segoe UI", 9.5f);
             string err = "JSON puuttuu"; try { string raw = AppDomain.CurrentDomain.GetData("PSA_JSON") as string; if (string.IsNullOrEmpty(raw)) { string p = Path.Combine(Environment.CurrentDirectory, "PsaKLineDatabase.json"); if (File.Exists(p)) raw = File.ReadAllText(p, Encoding.UTF8); } if (!string.IsNullOrEmpty(raw)) { raw = raw.Trim(); this.db = new JavaScriptSerializer { MaxJsonLength = 67108864 }.Deserialize<PsaKLineRoot>(raw); } } catch (Exception ex) { err = ex.Message; }
