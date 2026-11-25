@@ -111,6 +111,13 @@ namespace ZoneTool
 
 		// Token: 0x04000016 RID: 22
 		public List<Zone> Zones = new List<Zone>();
+
+		// True for the KWP2000-on-CAN (AEE2004) modules that use session 10C0 and
+		// security 2783/2784 instead of the UDS 1003 / 2703/2704 path. Null-safe.
+		public static bool IsKwp2004(string id)
+		{
+			return id == "BSI2004" || id == "CMB2004" || id == "EMF2004" || id == "RD4_2004" || id == "CLIM_2004" || id == "AAS_2004" || id == "BSM_2004";
+		}
 	}
 	// VIN pairing candidate (infotainment / radio unit on one tx:rx pair)
 	internal class VinPair
@@ -661,6 +668,33 @@ namespace ZoneTool
 			int num = Sk.Transform(msb, lsb, Data.Sec1) | Sk.Transform((int)chg[0], (int)chg[3], Data.Sec2);
 			int num2 = Sk.Transform((int)chg[1], (int)chg[2], Data.Sec1) | Sk.Transform(num >> 8, num & 255, Data.Sec2);
 			return (((long)num << 16 | (long)((ulong)num2)) & 0xFFFFFFFFL).ToString("X8");
+		}
+	}
+	// UI-independent protocol primitives, reusable by any front-end (Windows/Android).
+	// Byte sequences are identical to the original MainForm implementation; a 2-hex
+	// zone is KWP2000-on-CAN (21/61), a 4-hex zone is UDS (22/62).
+	internal static class ProtocolCore
+	{
+		// Read one zone; returns the data hex (without the service/zone echo) or null if the ECU did not answer OK.
+		public static string ReadZone(ITransport tr, string zone, int ms)
+		{
+			bool kwp = (zone.Length == 2);
+			string req = kwp ? ("21" + zone) : ("22" + zone);
+			string okPrefix = kwp ? ("61" + zone) : ("62" + zone);
+			string errPrefix = kwp ? "7F21" : "7F22";
+			string resp = tr.Send(req, new string[] { okPrefix, errPrefix }, ms);
+			int at = resp.IndexOf(okPrefix);
+			return (at < 0) ? null : resp.Substring(at + 2 + zone.Length);
+		}
+
+		// Same as ReadZone with a fixed 900 ms timeout; kept as a separate name for existing call sites.
+		public static string ReadZoneRaw(ITransport tr, string zone)
+		{
+			bool kwp = (zone.Length == 2);
+			string resp = tr.Send((kwp ? "21" : "22") + zone, new string[] { (kwp ? "61" : "62") + zone, kwp ? "7F21" : "7F22" }, 900);
+			int at = resp.IndexOf((kwp ? "61" : "62") + zone);
+			if (at < 0) { return null; }
+			return resp.Substring(at + 2 + zone.Length);
 		}
 	}
 	// Token: 0x02000009 RID: 9
@@ -3936,9 +3970,9 @@ namespace ZoneTool
 		private bool OpenSession()
 		{
 			this.trans.SelectEcu(this.curMod.Tx, this.curMod.Rx);
-			string openCmd = ((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "10C0" : "1003"; string text = this.Tx(openCmd, 1200);
+			string openCmd = ((Module.IsKwp2004(this.curMod.Id))) ? "10C0" : "1003"; string text = this.Tx(openCmd, 1200);
 			bool result;
-			if (!text.Contains(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "50C0" : "5003"))
+			if (!text.Contains(((Module.IsKwp2004(this.curMod.Id))) ? "50C0" : "5003"))
 			{
 				this.L("VIRHE/ERROR 1003 -> " + text);
 				result = false;
@@ -3958,15 +3992,9 @@ namespace ZoneTool
 
 		// Token: 0x06000085 RID: 133 RVA: 0x00008584 File Offset: 0x00006784
 		private string ReadZone(string zone, int ms)
-{
-bool kwp = (zone.Length == 2);
-string req = kwp ? ("21" + zone) : ("22" + zone);
-string okPrefix = kwp ? ("61" + zone) : ("62" + zone);
-string errPrefix = kwp ? "7F21" : "7F22";
-string text = this.trans.Send(req, new string[] { okPrefix, errPrefix }, ms);
-int num = text.IndexOf(okPrefix);
-return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
-}
+		{
+			return ProtocolCore.ReadZone(this.trans, zone, ms);
+		}
 
 		// Token: 0x06000086 RID: 134 RVA: 0x00008A1C File Offset: 0x00006C1C
 		private void DoReadAll()
@@ -4007,7 +4035,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									list.Add(zoneView);
 								}
 							}
-							this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+							this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -4101,7 +4129,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									}
 								}
 							}
-							this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+							this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 						}
 					}
 					catch (Exception ex)
@@ -4710,7 +4738,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 									int num = text2.IndexOf(kwpSec ? "6783" : "6703");
 									if (num < 0)
 									{
-										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+										this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 										this.L("VIRHE/ERROR: no seed.");
 									}
 									else
@@ -4719,7 +4747,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 										string str2 = Sk.Key(this.curMod.Key, chg);
 										if (!this.Tx((kwpSec ? "2784" : "2704") + str2, 800).Contains(kwpSec ? "6784" : "6704"))
 										{
-											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 											this.L("VIRHE/ERROR: unlock rejected (wrong key?).");
 										}
 										else
@@ -4784,7 +4812,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 													}
 												}
 											}
-											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 											this.Render();
 											MessageBox.Show(string.Concat(new object[]
 											{
@@ -4802,7 +4830,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 							{
 								try
 								{
-									this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+									this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 								}
 								catch
 								{
@@ -4947,7 +4975,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 										}
 										if (list2.Count == 0)
 										{
-											this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+											this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 											this.BeginInvoke(new Action(delegate()
 											{
 												MessageBox.Show((this.lang == "fi") ? "Kaikki zonet jo backupin mukaiset." : "All zones already match the backup.");
@@ -5002,7 +5030,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 											}));
 											if (!proceed)
 											{
-												this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+												this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 											}
 											else
 											{
@@ -5010,7 +5038,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 												int num4 = text6.IndexOf("6703");
 												if (num4 < 0)
 												{
-													this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+													this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 													this.L("VIRHE/ERROR: no seed.");
 												}
 												else
@@ -5019,7 +5047,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 													string str2 = Sk.Key(mod.Key, chg);
 													if (!this.Tx("2704" + str2, 800).Contains("6704"))
 													{
-														this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+														this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 														this.L("VIRHE/ERROR: unlock rejected (wrong/unknown key?).");
 													}
 													else
@@ -5051,7 +5079,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 																}
 															}
 														}
-														this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+														this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 													}
 												}
 											}
@@ -5062,7 +5090,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 								{
 									try
 									{
-										this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+										this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 									}
 									catch
 									{
@@ -5240,7 +5268,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 if (r.IndexOf("5902") < 0 && kwpIdx >= 0 && r.Length >= kwpIdx + 4)
 {
 int count = 0;
-try { count = Convert.ToInt32(r.Substring(kwpIdx + 2, 2), 16); } catch { }
+try { count = Convert.ToInt32(r.Substring(kwpIdx + 2, 2), 16); } catch { count = 0; /* malformed KWP DTC-count byte: treat as zero DTCs */ }
 string kwpData = r.Substring(kwpIdx + 4);
 for (int ci = 0; ci < count && (ci * 6 + 6) <= kwpData.Length; ci++)
 {
@@ -5417,10 +5445,7 @@ int num = r.IndexOf("5902");
 
 		private string ReadZoneRaw(ITransport tr, string zone)
 		{
-			bool kwp = (zone.Length == 2); string r = tr.Send((kwp ? "21" : "22") + zone, new string[] { (kwp ? "61" : "62") + zone, kwp ? "7F21" : "7F22" }, 900);
-			int i = r.IndexOf((kwp ? "61" : "62") + zone);
-			if (i < 0) { return null; }
-			return r.Substring(i + 2 + zone.Length);
+			return ProtocolCore.ReadZoneRaw(tr, zone);
 		}
 
 		private void ApplyProfile(string name, string label)
@@ -5487,7 +5512,7 @@ int num = r.IndexOf("5902");
 					}
 					catch (Exception ex)
 					{
-						try { tr.Send("1001", null, 300); } catch { }
+						try { tr.Send("1001", null, 300); } catch { /* best-effort session close on the error path; transport may already be down */ }
 						this.L("VIRHE/ERROR " + m.Name + ": " + ex.Message);
 					}
 				}
@@ -5687,12 +5712,12 @@ int num = r.IndexOf("5902");
 					{
 						if (clear)
 						{
-							string text = this.Tx(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "14FF00" : "14FFFFFF", 1500);
+							string text = this.Tx(((Module.IsKwp2004(this.curMod.Id))) ? "14FF00" : "14FFFFFF", 1500);
 							this.L(text.Contains("54") ? "DTC cleared (54)." : ("Clear: " + text));
 							Thread.Sleep(300);
 						}
-						string text2 = this.Tx(((this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "17FF00" : "19020C", 1500);
-						this.Tx((this.curMod != null && (this.curMod.Id == "BSI2004" || this.curMod.Id == "CMB2004" || this.curMod.Id == "EMF2004" || this.curMod.Id == "RD4_2004" || this.curMod.Id == "CLIM_2004" || this.curMod.Id == "AAS_2004" || this.curMod.Id == "BSM_2004")) ? "1081" : "1001", 300);
+						string text2 = this.Tx(((Module.IsKwp2004(this.curMod.Id))) ? "17FF00" : "19020C", 1500);
+						this.Tx((this.curMod != null && (Module.IsKwp2004(this.curMod.Id))) ? "1081" : "1001", 300);
 						this.L("DTC (" + this.curMod.Id + "): " + text2);
 						this.ShowDtc(((this.lang == "fi") ? "Vikakoodit: " : "DTCs: ") + this.curMod.Id, this.DtcDecode(text2), text2);
 					}
@@ -6026,7 +6051,7 @@ int num = r.IndexOf("5902");
 				finally
 				{
 					this.busy = false;
-					try { this.BeginInvoke(new Action(delegate() { this.SetButtons(true); })); } catch { }
+					try { this.BeginInvoke(new Action(delegate() { this.SetButtons(true); })); } catch (Exception) { /* form disposed/closing during shutdown */ }
 				}
 			}).Start();
 		}
