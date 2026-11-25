@@ -1363,7 +1363,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 }; private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };         public string Scan406D8AllPins()
         {
             if (!this.IsOpen) { string o = this.Open(""); if (!this.IsOpen) return "VCI ei auki: " + o; }
-            var sb = new StringBuilder("=== 1997 PEUGEOT 406 D8 TAYSI PINNI- & HERATESSKANNERI v2.5.0 ({2,16,232} OK!) ===\r\n");
+            var sb = new StringBuilder("=== 1997 PEUGEOT 406 D8 TAYSI PINNI- & HERATESSKANNERI v2.6.0-beta (TESTIVERSIO - ei testattu autossa) ({2,16,232} OK!) ===\r\n");
             int[] pins = new int[] { 7, 15, 11, 12, 13, 8, 3, 1 };
             byte[] addrs = new byte[] { 0x10, 0x13, 0x01, 0x33, 0x11, 0x7A, 0x68, 0x28 };
 
@@ -1915,7 +1915,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 				},
 				{
 					"ripper",
-					"Diagbox DataRipper (rippaa selitteet)"
+					"Local Data Overlay (rippaa selitteet)"
 				}
 			};
 			Dictionary<string, string> dictionary2 = new Dictionary<string, string>
@@ -1978,7 +1978,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 				},
 				{
 					"ripper",
-					"Diagbox DataRipper (rip descriptions)"
+					"Local Data Overlay (rip descriptions)"
 				}
 			};
 			Dictionary<string, string> dictionary3 = (this.lang == "fi") ? dictionary : dictionary2;
@@ -2007,7 +2007,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
-			this.Text = "Stellantis Config Messer v2.5.0 (+ PSA K-Line / MP 7.0)";
+			this.Text = "Stellantis Config Messer v2.6.0-beta (TESTIVERSIO - ei testattu autossa) (+ PSA K-Line / MP 7.0)";
 			base.Width = 1180;
 			base.Height = 760;
 			base.StartPosition = FormStartPosition.CenterScreen;
@@ -2050,7 +2050,7 @@ private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf
 			this.cbTrans.Items.Add("Diagbox VCI");
 			this.cbTrans.Items.Add("ELM327");
 			this.cbTrans.Items.Add("Demo");
-            this.cbTrans.Items.Add("Delphi DS150E");
+            this.cbTrans.Items.Add("ADP186 VCI");
 			this.cbTrans.SelectedIndex = 0;
 			this.cbTrans.SelectedIndexChanged += delegate(object s, EventArgs e)
 			{
@@ -3008,7 +3008,7 @@ this.PopulateModules(Data.Modules);
 				{
 					this.trans.Close();
 					this.trans = null;
-					this.Text = "Stellantis Config Messer v2.5.0 (+ PSA K-Line / MP 7.0)";
+					this.Text = "Stellantis Config Messer v2.6.0-beta (TESTIVERSIO - ei testattu autossa) (+ PSA K-Line / MP 7.0)";
 					this.vin = "";
 					this.lblStatus.Text = this.T("noconn");
 					this.lblStatus.ForeColor = Theme.Red;
@@ -3041,7 +3041,7 @@ this.PopulateModules(Data.Modules);
 				else
 				{
 					string text;
-					if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString() == "Delphi DS150E") { this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; string port = this.ds150e.Open(""); if (this.ds150e.IsOpen) { this.trans = this.ds150e; this.lblStatus.Text = "Yhdistetty: " + port; this.lblStatus.ForeColor = System.Drawing.Color.LimeGreen; this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; } else { MessageBox.Show("Delphi DS150E -laitetta ei loytynyt.", "Delphi DS150E", MessageBoxButtons.OK, MessageBoxIcon.Warning); } return; } else if (this.Vci())
+					if (this.cbTrans.SelectedItem != null && this.cbTrans.SelectedItem.ToString() == "ADP186 VCI") { this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; string port = this.ds150e.Open(""); if (this.ds150e.IsOpen) { this.trans = this.ds150e; this.lblStatus.Text = "Yhdistetty: " + port; this.lblStatus.ForeColor = System.Drawing.Color.LimeGreen; this.ds150e.Log = delegate(string m) { try { if (this.txtLog != null) this.txtLog.AppendText(m + "\r\n"); } catch { } }; } else { MessageBox.Show("ADP186 VCI -laitetta ei loytynyt.", "ADP186 VCI", MessageBoxButtons.OK, MessageBoxIcon.Warning); } return; } else if (this.Vci())
 					{
 						VciTransport vciTransport = new VciTransport
 						{
@@ -4116,7 +4116,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 		{
 			if (fi)
 			{
-				return "\u2022  Valitse yhteystapa (Arduino / Diagbox VCI / ELM327 / Delphi DS150E) ja portti, paina Yhdist\u00e4.\n" +
+				return "\u2022  Valitse yhteystapa (Arduino / Diagbox VCI / ELM327 / ADP186 VCI) ja portti, paina Yhdist\u00e4.\n" +
 					"    Tai valitse Demo ja selaa kaikkia ohjainlaitteita ja zoneja ilman autoa.\n\n" +
 					"\u2022  Valitse ohjainlaite (ECU) yl\u00e4reunan pudotusvalikosta.\n\n" +
 					"\u2022  Lue  \u2013  hakee ECU:n kaikki konfiguraatiozonet. Kentt\u00e4 n\u00e4kyy kytkimen\u00e4, pudotusvalikkona\n" +
@@ -4124,10 +4124,10 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 					"\u2022  Muuta arvot ja paina Kirjoita. Varmuuskopio tehd\u00e4\u00e4n automaattisesti ennen jokaista\n" +
 					"    kirjoitusta (backup\\<VIN>\\<ECU>). Ei-varmistetuista ECU:ista tulee varoitus.\n\n" +
 					"\u2022  Lue DTC / Tyhjenn\u00e4 DTC k\u00e4sittelee vikakoodit.  Skannaa etsii piilotetut zonet.\n\n" +
-					"\u2022  Ty\u00f6kalut-valikko:  palauta konfiguraatio backupista  tai  aja Diagbox DataRipper.\n\n" +
+					"\u2022  Ty\u00f6kalut-valikko:  palauta konfiguraatio backupista  tai  aja Local Data Overlay.\n\n" +
 					"\u26a0  K\u00e4yt\u00e4 omalla vastuulla, vain omaan autoosi, vakaalla j\u00e4nnitteell\u00e4.";
 			}
-			return "\u2022  Pick an interface (Arduino / Diagbox VCI / ELM327 / Delphi DS150E) and port, then press Connect.\n" +
+			return "\u2022  Pick an interface (Arduino / Diagbox VCI / ELM327 / ADP186 VCI) and port, then press Connect.\n" +
 				"    Or pick Demo to browse every ECU and zone without a car.\n\n" +
 				"\u2022  Select an ECU from the drop-down at the top.\n\n" +
 				"\u2022  Read  \u2013  fetches all of the ECU's config zones. A field shows as a toggle, a drop-down\n" +
@@ -4135,7 +4135,7 @@ return (num < 0) ? null : text.Substring(num + 2 + zone.Length);
 				"\u2022  Change the values and press Write. A backup is taken automatically before every\n" +
 				"    write (backup\\<VIN>\\<ECU>). Non-verified ECUs show a warning first.\n\n" +
 				"\u2022  Read DTC / Clear DTC handle fault codes.  Scan searches for hidden zones.\n\n" +
-				"\u2022  Tools menu:  restore configuration from a backup  or  run the Diagbox DataRipper.\n\n" +
+				"\u2022  Tools menu:  restore configuration from a backup  or  run the Local Data Overlay.\n\n" +
 				"\u26a0  Use entirely at your own risk, on a car you own, with a stable power supply.";
 		}
 
@@ -4951,7 +4951,7 @@ this.PopulateModules(Data.Modules);
 					Data.LoadOverlay(path3);
 					this.L(string.Concat(new object[]
 					{
-						(this.lang == "fi") ? "Diagbox-rippaus: " : "Diagbox rip: ",
+						(this.lang == "fi") ? "Local overlay: " : "Local overlay: ",
 						num,
 						(this.lang == "fi") ? " ECU, " : " ECUs, ",
 						num2,
@@ -4963,7 +4963,7 @@ this.PopulateModules(Data.Modules);
 						num,
 						" ECU-tiedostoa, ",
 						num2,
-						" telekoodausparametria luettu Diagboxista.\n\nDTC-selitteet (5717 koodia) tulevat jo avoimesta dtc.json:sta.\nHUOM: ripattu data on paikallista (Diagbox-omaa) - ei julkaista."
+						" telekoodausparametria luettu Diagboxista.\n\nDTC-selitteet (5717 koodia) tulevat jo avoimesta dtc.json:sta.\nHUOM: ripattu data on paikallista (paikallista) - ei julkaista."
 					}) : string.Concat(new object[]
 					{
 						"Rip done.\n",
@@ -4971,7 +4971,7 @@ this.PopulateModules(Data.Modules);
 						" ECU files, ",
 						num2,
 						" telecoding params read from Diagbox.\n\nDTC descriptions (5717 codes) already come from open dtc.json.\nNote: ripped data is local (Diagbox-proprietary) - not published."
-					}), "Diagbox DataRipper", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+					}), "Local Data Overlay", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 					this.Render();
 				}
 				catch (Exception ex)
