@@ -78,6 +78,23 @@ No proprietary Diagbox data is bundled. The **Diagbox DataRipper** (Tools menu) 
 DTC descriptions (from the local Diagbox Firebird DB via its POLUXDATA string tables) and
 CAN2004 telecoding layouts — always from the user's own Diagbox install, never shipped here.
 
+## K-line / Bosch MP7.0 diagnostics (ported from cacadu90)
+
+Early PSA ECUs (pre-CAN, e.g. the 1997 406 D8 / ES9J4 V6) speak KWP2000 / ISO9141 over
+**K-line**. Ported from [cacadu90's v2.6.0-beta](https://github.com/cacadu90/stellantis-config-messer):
+
+- **ADP186 / Autocom transport** (`AutocomTransport`) — a WinUSB driver for the Autocom-style
+  VCI, selectable as **ADP186 VCI** in the transport dropdown.
+- **K-line over the Diagbox VCI** — `VciTransport` gained 5-baud / fast-init KWP2000 support
+  (`VciKlineInit`, `VciKlineTxRx`, `Scan406D8AllPins`).
+- **PSA K-Line / Bosch MP7.0** tool (Tools menu) — a 675-ECU PP2000/RTEP K-line reference
+  database, an MP7.0 live-value / fault-code decoder (`Mp7Decoder`) and actuator tests.
+- An optional **J2534 PassThru** K-line probe (`ActiaJ2534Kline`) for 5-baud init via a
+  PassThru DLL.
+
+> These K-line paths are **not yet verified on a car** — they are device/driver-dependent
+> (WinUSB, `VCIAccess.dll`, J2534) and ported as-is for testing.
+
 ## Requirements
 
 - Windows with **.NET Framework 4.x** (already present on modern Windows) — the app is
@@ -88,6 +105,7 @@ CAN2004 telecoding layouts — always from the user's own Diagbox install, never
   - a Diagbox / Evolution XS VCI with `C:\AWRoot\drv\VCIAccess.dll` (installed by Diagbox).
     The app must be built/run as **x86** to load the 32-bit DLL (see below), **or**
   - a generic **ELM327** adapter (experimental), **or**
+  - an **ADP186 / Autocom** WinUSB VCI (VID_0403&PID_D6DA, `*`-command protocol), **or**
   - none at all — use **Demo** mode to explore the ECU/zone catalogue offline.
 - An OBD adapter wiring the correct CAN-DIAG pins (3/8 on older PSA, 6/14 on newer).
 
@@ -96,7 +114,7 @@ CAN2004 telecoding layouts — always from the user's own Diagbox install, never
 ```
 [settings]
 lang=fi|en
-transport=Arduino|Diagbox VCI|ELM327|Demo
+transport=Arduino|Diagbox VCI|ELM327|Demo|ADP186 VCI
 port=COMx
 pin=0|1      ; 1 shows the immobiliser PIN-read button (your own car only); default 0
 ```
@@ -109,7 +127,8 @@ No IDE needed — compile with the C# compiler that ships with .NET Framework:
 C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /platform:x86 /target:winexe ^
   /out:StellantisConfigMesser.exe /win32icon:app.ico ^
   /reference:System.Windows.Forms.dll /reference:System.Drawing.dll ^
-  /reference:System.Web.Extensions.dll /reference:System.Management.dll ZoneTool.cs
+  /reference:System.Web.Extensions.dll /reference:System.Management.dll ^
+  ZoneTool.cs AutocomTransport.cs ActiaJ2534Kline.cs Mp7Decoder.cs PsaKLineHub.cs
 ```
 
 `/platform:x86` is required so the app can P/Invoke the 32-bit Diagbox `VCIAccess.dll`.

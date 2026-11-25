@@ -1399,6 +1399,10 @@ namespace ZoneTool
 		[DllImport("C:\\AWRoot\\drv\\VCIAccess.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "_bindProtocol")]
 		private static extern int BindProtocol(byte[] desc, int len);
 
+		// K-line 5-baud / fast-init (ported from cacadu90 v2.6.0-beta)
+		[DllImport("C:\\AWRoot\\drv\\VCIAccess.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "_performInit")]
+		private static extern int PerformInit(byte[] initBuf, int initLen, byte[] outBuf, int outLen);
+
 		// Token: 0x06000044 RID: 68
 		[DllImport("C:\\AWRoot\\drv\\VCIAccess.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "_writeAndRead")]
 		private static extern int WriteAndRead(byte[] ecuDesc, int ecuLen, byte[] inBuf, int inLen, byte[] outBuf, int outLen, int timeout);
@@ -1530,9 +1534,77 @@ namespace ZoneTool
 			}
 		}
 
+		// K-line protocol descriptors (ported from cacadu90 v2.6.0-beta)
+		private static readonly byte[] PD_ISO9141 = new byte[] { 1, 16, 232 };
+		private static readonly byte[] PD_KWP2000 = new byte[] { 2, 16, 232 };
+
+		// Full 1997 Peugeot 406 D8 pin/wake scanner over K-line. Ported from cacadu90 v2.6.0-beta; not tested on hardware here.
+		public string Scan406D8AllPins()
+		{
+			if (!this.IsOpen) { string o = this.Open(""); if (!this.IsOpen) return "VCI ei auki: " + o; }
+			StringBuilder sb = new StringBuilder("=== 1997 PEUGEOT 406 D8 TAYSI PINNI- & HERATESSKANNERI (ported cacadu90 v2.6.0-beta, ei testattu autossa) ===\r\n");
+			int[] pins = new int[] { 7, 15, 11, 12, 13, 8, 3, 1 };
+			byte[] addrs = new byte[] { 0x10, 0x13, 0x01, 0x33, 0x11, 0x7A, 0x68, 0x28 };
+			foreach (int pin in pins)
+			{
+				int c1 = VciTransport.ChangeComLine(pin);
+				int c2 = VciTransport.BindProtocol(PD_KWP2000, PD_KWP2000.Length);
+				if (c1 != 0 || c2 != 0) { sb.AppendLine(string.Format("Pin {0}: ChangeComLine={1}, Bind={2}", pin, c1, c2)); continue; }
+				bool hit = false;
+				foreach (byte addr in addrs)
+				{
+					foreach (byte mode in new byte[] { 0, 1 })
+					{
+						byte[] initIn = new byte[] { addr, mode };
+						byte[] initOut = new byte[64];
+						int c3 = VciTransport.PerformInit(initIn, initIn.Length, initOut, initOut.Length);
+						if (c3 == 0)
+						{
+							hit = true;
+							sb.AppendLine(string.Format(">>> OSUMA! Pin {0} | Osoite 0x{1:X2} | Mode={2} ({3}) -> OK! KeyBytes: {4}", pin, addr, mode, (mode == 0 ? "5-Baud" : "FastInit"), BitConverter.ToString(initOut, 0, 8)));
+						}
+					}
+				}
+				if (!hit) sb.AppendLine(string.Format("Pin {0}: Bind OK (0), ei vastausta (tarkista virrat / Economy Mode)", pin));
+			}
+			string resStr = sb.ToString();
+			try { string ld = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"); Directory.CreateDirectory(ld); File.AppendAllText(Path.Combine(ld, "VCI_Log_" + DateTime.Now.ToString("yyyyMMdd") + ".txt"), resStr + Environment.NewLine); } catch { }
+			return resStr;
+		}
+
+		// Initialise a K-line ECU on a given OBD pin (5-baud slow or fast init). Ported from cacadu90 v2.6.0-beta.
+		public string VciKlineInit(int obdPin, byte targetAddr, bool fastInit)
+		{
+			if (!this.connected) { string o = this.Open(""); if (!this.connected) return o; }
+			int c1 = VciTransport.ChangeComLine(obdPin);
+			byte[] proto = fastInit ? PD_KWP2000 : PD_ISO9141;
+			int c2 = VciTransport.BindProtocol(proto, proto.Length);
+			byte[] initIn = new byte[] { targetAddr, (byte)(fastInit ? 1 : 0) };
+			byte[] initOut = new byte[64];
+			int c3 = VciTransport.PerformInit(initIn, initIn.Length, initOut, initOut.Length);
+			this.desc = new byte[] { targetAddr, 0xF1 };
+			string msg = string.Format("VCI Pin {0} | {1} ({2}) | Init 0x{3:X2} -> {4}", obdPin, fastInit ? "KWP2000" : "ISO9141", VciTransport.Status(c2), targetAddr, VciTransport.Status(c3));
+			if (this.Log != null) this.Log(msg);
+			return msg;
+		}
+
+		// Send a raw KWP2000 K-line frame and return the response hex. Ported from cacadu90 v2.6.0-beta.
+		public string VciKlineTxRx(string hexCmd, int timeoutMs)
+		{
+			if (!this.connected || this.desc == null) return "ERR: VCI ei alustettu";
+			byte[] req = Hex.ToBytes(hexCmd.Replace(" ", ""));
+			byte[] resp = new byte[2048];
+			int n = VciTransport.WriteAndRead(this.desc, this.desc.Length, req, req.Length, resp, resp.Length, timeoutMs);
+			string outHex = (n > 0) ? BitConverter.ToString(resp, 0, n).Replace("-", " ") : ("[" + VciTransport.Status(n) + "]");
+			if (this.Log != null) this.Log("K-LINE TX: " + hexCmd + " -> " + outHex);
+			try { string ld = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"); Directory.CreateDirectory(ld); File.AppendAllText(Path.Combine(ld, "VCI_Log_" + DateTime.Now.ToString("yyyyMMdd") + ".txt"), DateTime.Now.ToString("HH:mm:ss.fff") + " | TX: " + hexCmd + " | RX: " + outHex + Environment.NewLine); } catch { }
+			return outHex;
+		}
+
 		// Token: 0x0600004C RID: 76 RVA: 0x0000439C File Offset: 0x0000259C
 		public void SelectEcu(string tx, string rx)
 		{
+			if (tx != null && tx.StartsWith("KLINE:", StringComparison.OrdinalIgnoreCase)) { string[] p = tx.Split(':'); this.VciKlineInit((p.Length > 1) ? Convert.ToInt32(p[1]) : 7, (p.Length > 2) ? Convert.ToByte(p[2], 16) : (byte)0x33, false); return; }
 			int c = VciTransport.ChangeComLine(17);
 			if (this.Log != null)
 			{
@@ -2459,6 +2531,12 @@ namespace ZoneTool
 			return this.cbTrans.SelectedIndex == 3;
 		}
 
+		// ADP186 / Autocom WinUSB transport (ported from cacadu90 v2.6.0-beta)
+		private bool Autocom()
+		{
+			return this.cbTrans.SelectedIndex == 4;
+		}
+
 		// Token: 0x06000072 RID: 114 RVA: 0x0000539C File Offset: 0x0000359C
 		public MainForm()
 		{
@@ -2505,6 +2583,7 @@ namespace ZoneTool
 			this.cbTrans.Items.Add("Diagbox VCI");
 			this.cbTrans.Items.Add("ELM327");
 			this.cbTrans.Items.Add("Demo");
+			this.cbTrans.Items.Add("ADP186 VCI");
 			this.cbTrans.SelectedIndex = 0;
 			this.cbTrans.SelectedIndexChanged += delegate(object s, EventArgs e)
 			{
@@ -2787,6 +2866,9 @@ namespace ZoneTool
 			this.menuMapped = new ToolStripMenuItem();
 			this.menuMapped.Click += delegate(object s, EventArgs e) { this.BuildMappedZones(); };
 			this.menuTools.DropDownItems.Add(this.menuMapped);
+			this.menuKline = new ToolStripMenuItem();
+			this.menuKline.Click += delegate(object s, EventArgs e) { try { using (PsaKLineForm f = new PsaKLineForm(this.lang, this.trans)) { f.ShowDialog(this); } } catch (Exception ex) { MessageBox.Show(ex.Message); } };
+			this.menuTools.DropDownItems.Add(this.menuKline);
 			this.menuTools.DropDownItems.Add(this.menuRestore);
 			this.menuTools.DropDownItems.Add(this.menuRip);
 			menuStrip.Items.Add(this.menuTools);
@@ -3054,6 +3136,7 @@ namespace ZoneTool
 				if (this.menuProfiles != null) { this.menuProfiles.Text = (this.lang == "fi") ? "Valmiit profiilit (kirjoita kaikki moduulit)" : "Ready profiles (write all modules)"; }
 				if (this.menuClassic != null) { this.menuClassic.Text = (this.lang == "fi") ? "Klassinen BSI (2004)..." : "Classic BSI (2004)..."; }
 				if (this.menuMapped != null) { this.menuMapped.Text = (this.lang == "fi") ? "Pura mapped-zonet (35-taulu)" : "Build mapped zones (35 table)"; }
+				if (this.menuKline != null) { this.menuKline.Text = (this.lang == "fi") ? "PSA K-Line / Bosch MP7.0 (675 ECU)..." : "PSA K-Line / Bosch MP7.0 (675 ECUs)..."; }
 				if (this.menuExport != null) { this.menuExport.Text = (this.lang == "fi") ? "Vie luettu konfiguraatio (.txt)" : "Export read config (.txt)"; }
 				if (this.menuCompare != null) { this.menuCompare.Text = (this.lang == "fi") ? "Vertaa varmuuskopioita" : "Compare backups"; }
 			}
@@ -3483,6 +3566,16 @@ namespace ZoneTool
 						text = vciTransport.Open(null);
 						this.trans = vciTransport;
 					}
+					else if (this.Autocom())
+					{
+						AutocomTransport autocomTransport = new AutocomTransport
+						{
+							Log = new Action<string>(this.L)
+						};
+						autocomTransport.Open(null);
+						this.trans = autocomTransport;
+						text = autocomTransport.IsOpen ? "" : ((this.lang == "fi") ? "ADP186/Autocom-laitetta ei loytynyt (WinUSB VID_0403&PID_D6DA)." : "ADP186/Autocom device not found (WinUSB VID_0403&PID_D6DA).");
+					}
 					else
 					{
 						if (this.cbPort.SelectedItem == null)
@@ -3518,7 +3611,7 @@ namespace ZoneTool
 					}
 					else
 					{
-						this.lblStatus.Text = this.T("connto") + (this.Vci() ? "Diagbox VCI" : this.cbPort.SelectedItem.ToString());
+						this.lblStatus.Text = this.T("connto") + (this.Vci() ? "Diagbox VCI" : (this.Autocom() ? "ADP186 VCI" : this.cbPort.SelectedItem.ToString()));
 						this.lblStatus.ForeColor = Theme.Green;
 						this.btnConn.Text = this.T("disc");
 						this.ReadVinToTitle();
@@ -5842,6 +5935,8 @@ int num = r.IndexOf("5902");
 		private ToolStripMenuItem menuClassic;
 
 		private ToolStripMenuItem menuMapped;
+
+		private ToolStripMenuItem menuKline;
 
 			private ToolStripMenuItem menuView;
 
